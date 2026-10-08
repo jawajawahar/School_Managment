@@ -69,27 +69,29 @@ class ApiService {
 
   // 3. Fetch Students for Class
   Future<List<StudentModel>> fetchStudents(String classId) async {
-    final url = Uri.parse('${ApiConstants.baseUrl}${ApiConstants.studentsEndpoint}');
+    final endpoint = classId.isNotEmpty
+        ? '${ApiConstants.baseUrl}${ApiConstants.studentsEndpoint}?classId=$classId'
+        : '${ApiConstants.baseUrl}${ApiConstants.studentsEndpoint}';
+    final url = Uri.parse(endpoint);
     try {
       final response = await client.get(url, headers: headers);
       if (response.statusCode == 200) {
         final List list = jsonDecode(response.body);
-        final filtered = list.where((s) => s['classId'] == classId || classId.isEmpty).toList();
-        if (filtered.isNotEmpty) {
-          return filtered.map((s) => StudentModel.fromJson(s)).toList();
+        if (list.isNotEmpty) {
+          return list.map((s) => StudentModel.fromJson(s)).toList();
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      print('API Error fetching students: $e');
+    }
 
-    // Fallback Mock Students for Demo
+    // Fallback Mock Students only if server unreachable
     return [
-      StudentModel(id: 'stu-101', studentNo: 'GSMS-1001', firstName: 'Kavindu', lastName: 'Perera', classId: classId),
-      StudentModel(id: 'stu-102', studentNo: 'GSMS-1002', firstName: 'Nethmi', lastName: 'Fernando', classId: classId),
-      StudentModel(id: 'stu-103', studentNo: 'GSMS-1003', firstName: 'Dineth', lastName: 'Silva', classId: classId),
-      StudentModel(id: 'stu-104', studentNo: 'GSMS-1004', firstName: 'Amaya', lastName: 'Jayawardena', classId: classId),
-      StudentModel(id: 'stu-105', studentNo: 'GSMS-1005', firstName: 'Tharindu', lastName: 'Bandara', classId: classId),
-      StudentModel(id: 'stu-106', studentNo: 'GSMS-1006', firstName: 'Ruwan', lastName: 'Gunasekara', classId: classId),
-      StudentModel(id: 'stu-107', studentNo: 'GSMS-1007', firstName: 'Shenali', lastName: 'De Silva', classId: classId),
+      StudentModel(id: 'stu-9a-1', studentNo: 'GSMS-2026-0301', firstName: 'Kasun', lastName: 'Kalhara', classId: classId),
+      StudentModel(id: 'stu-9a-2', studentNo: 'GSMS-2026-0302', firstName: 'Nipuni', lastName: 'Tharushika', classId: classId),
+      StudentModel(id: 'stu-9a-3', studentNo: 'GSMS-2026-0303', firstName: 'Dineth', lastName: 'Prabhashitha', classId: classId),
+      StudentModel(id: 'stu-9a-4', studentNo: 'GSMS-2026-0304', firstName: 'Kavindi', lastName: 'Senanayake', classId: classId),
+      StudentModel(id: 'stu-9a-5', studentNo: 'GSMS-2026-0305', firstName: 'Chamath', lastName: 'Bandara', classId: classId),
     ];
   }
 

@@ -455,8 +455,9 @@ app.post('/api/teaching-assignments', async (req, res) => {
 // 5. STUDENTS DIRECTORY & CLASS ALLOCATION
 // ==========================================
 app.get('/api/students', async (req, res) => {
+  const { classId } = req.query;
   try {
-    const { rows } = await query(`
+    let sql = `
       SELECT 
         s.id, s.school_id AS "schoolId", s.student_no AS "studentNo", s.user_id AS "userId",
         s.first_name AS "firstName", s.last_name AS "lastName",
@@ -470,8 +471,15 @@ app.get('/api/students', async (req, res) => {
         COALESCE(s.enrolled_subject_ids, '[]'::jsonb) AS "enrolledSubjectIds"
       FROM students s
       LEFT JOIN users u ON s.user_id = u.id
-      ORDER BY s.first_name, s.last_name
-    `);
+    `;
+    const params = [];
+    if (classId) {
+      params.push(classId);
+      sql += ` WHERE s.class_id = $1 OR LOWER(s.class_id) = LOWER($1)`;
+    }
+    sql += ` ORDER BY s.first_name, s.last_name`;
+
+    const { rows } = await query(sql, params);
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });

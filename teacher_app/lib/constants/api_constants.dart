@@ -1,7 +1,15 @@
+import 'package:flutter/foundation.dart';
+
 class ApiConstants {
-  // Base URL for backend server (5000)
-  // For Android Emulator use 10.0.2.2, for Physical Device / Windows Desktop use localhost or local IP
-  static String baseUrl = 'http://localhost:5000/api';
+  // Dynamic Host Detection:
+  // Android Emulator uses 10.0.2.2 to access host machine localhost:5000
+  // iOS / Windows Desktop / Web uses localhost or network IP
+  static String get baseUrl {
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      return 'http://10.0.2.2:5000/api';
+    }
+    return 'http://localhost:5000/api';
+  }
 
   // Auth
   static const String loginEndpoint = '/auth/login';

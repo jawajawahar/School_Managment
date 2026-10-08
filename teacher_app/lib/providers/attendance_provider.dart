@@ -45,7 +45,11 @@ class AttendanceProvider extends ChangeNotifier {
 
     _classes = await _apiService.fetchClasses();
     if (_classes.isNotEmpty && _selectedClassId == null) {
-      _selectedClassId = _classes.first['id'];
+      final grade9Class = _classes.firstWhere(
+        (c) => c['id'] == 'class-9a' || c['grade'].toString().toLowerCase().contains('9'),
+        orElse: () => _classes.first,
+      );
+      _selectedClassId = grade9Class['id'];
       await loadStudentsForClass(_selectedClassId!);
     }
     _isLoadingClasses = false;
