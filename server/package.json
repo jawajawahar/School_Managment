@@ -1,0 +1,21 @@
+{
+  "name": "gsms-backend-server",
+  "version": "1.0.0",
+  "description": "GSMS PostgreSQL Node.js Express REST API Server",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node index.js",
+    "init-db": "node initDb.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^7.0.0-rc14",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "pdfkit": "^0.20.2",
+    "pg": "^8.11.5",
+    "pino": "^10.3.1",
+    "qrcode": "^1.5.4"
+  }
+}

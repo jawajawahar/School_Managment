@@ -1,0 +1,314 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400..700;1,400..700&family=Outfit:wght@500;600;700;800&family=Plus+Jakarta+Sans:ital,wght@0,400..800;1,400..800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    background-color: #F6F7F9;
+    color: #14171F;
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, h4, .font-display {
+    font-family: 'Outfit', 'Plus Jakarta Sans', sans-serif;
+    letter-spacing: -0.02em;
+  }
+
+  .font-mono-data {
+    font-family: 'JetBrains Mono', monospace;
+    font-feature-settings: "zero" 1;
+  }
+
+  ::selection {
+    background-color: rgba(30, 75, 143, 0.18);
+  }
+}
+
+/* ═══════════════════════════════════════════
+   FORM ELEMENTS — native select arrow only.
+   Sizing/borders/focus are owned by the
+   FormField/Input/Select React components.
+   ═══════════════════════════════════════════ */
+
+select {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%235B616E' stroke-width='2.2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 0.75rem center !important;
+  background-size: 1em 1em !important;
+  padding-right: 2.25rem !important;
+  cursor: pointer;
+}
+
+select option {
+  background-color: #FFFFFF !important;
+  color: #14171F !important;
+  padding: 8px 12px !important;
+}
+
+/* ═══════════════════════════════════════════
+   SCROLLBAR
+   ═══════════════════════════════════════════ */
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #D0D3DA; border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: #8B909C; }
+
+/* ═══════════════════════════════════════════
+   FOCUS-VISIBLE — consistent keyboard focus ring
+   ═══════════════════════════════════════════ */
+
+:focus-visible {
+  outline: 2px solid #2C6E63;
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   LEGACY "paper ledger" component classes
+   Kept only so modules not yet migrated to the src/components/ui
+   design system keep rendering as before. Every class below should be
+   deleted, module by module, as each screen is redesigned — do not
+   add new usages of these classes.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.card {
+  @apply bg-white border border-rule/60 rounded-xl p-6 shadow-sm transition-all duration-200;
+}
+.card:hover {
+  @apply shadow-md border-gold/40;
+}
+.stat-card {
+  @apply bg-white border border-rule/50 rounded-2xl p-6 shadow-sm hover:shadow-lg hover:border-gold/50 transition-all duration-300 relative overflow-hidden;
+}
+.panel {
+  @apply bg-white border border-rule/60 rounded-2xl shadow-sm overflow-hidden;
+}
+.table-row {
+  @apply border-b border-rule/40 transition-colors duration-150 hover:bg-amber-50/40;
+}
+.table-row:last-child {
+  @apply border-b-0;
+}
+.badge {
+  @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold font-mono-data;
+}
+.badge-green { @apply badge bg-green-light text-green-register border border-green-border; }
+.badge-gold { @apply badge bg-amber-50 text-amber-800 border border-amber-200; }
+.badge-red { @apply badge bg-red-light text-red-marking border border-red-border; }
+.badge-blue { @apply badge bg-blue-50 text-blue-700 border border-blue-200; }
+.badge-navy { @apply badge bg-navy/10 text-navy border border-navy/20; }
+
+.btn-primary {
+  @apply inline-flex items-center gap-1.5 px-4 py-2.5 bg-navy text-paper font-semibold text-sm rounded-lg hover:bg-navy-light active:scale-95 transition-all duration-150 shadow-sm;
+}
+.btn-secondary {
+  @apply inline-flex items-center gap-1.5 px-4 py-2.5 bg-white text-navy font-semibold text-sm rounded-lg border border-rule hover:border-gold hover:bg-amber-50/50 active:scale-95 transition-all duration-150;
+}
+.btn-gold {
+  @apply inline-flex items-center gap-1.5 px-4 py-2.5 bg-gold text-white font-bold text-sm rounded-lg hover:bg-gold-light active:scale-95 transition-all duration-150 shadow-sm;
+}
+.btn-danger {
+  @apply inline-flex items-center gap-1.5 px-4 py-2.5 bg-red-marking text-white font-semibold text-sm rounded-lg hover:opacity-90 active:scale-95 transition-all duration-150;
+}
+.btn-success {
+  @apply inline-flex items-center gap-1.5 px-4 py-2.5 bg-green-register text-white font-semibold text-sm rounded-lg hover:opacity-90 active:scale-95 transition-all duration-150;
+}
+
+.section-header { @apply flex items-center gap-3 pb-4 border-b border-rule/40 mb-5; }
+.section-title { @apply font-display font-bold text-xl text-navy; }
+.section-label { @apply text-[11px] font-mono-data font-bold uppercase tracking-widest text-gold; }
+
+.data-table { @apply w-full text-sm; }
+.data-table thead th {
+  @apply px-4 py-3 text-left text-[11px] font-mono-data font-bold uppercase tracking-wider text-ledger bg-paper-dark border-b border-rule/60;
+}
+.data-table tbody tr {
+  @apply border-b border-rule/30 hover:bg-amber-50/40 transition-colors duration-100;
+}
+.data-table tbody tr:last-child { @apply border-b-0; }
+.data-table tbody td { @apply px-4 py-3 text-sm text-navy; }
+
+.register-ruled-row {
+  border-bottom: 1px solid rgba(201, 194, 178, 0.5);
+  transition: background-color 150ms ease;
+}
+.register-ruled-row:hover { background-color: rgba(250, 248, 243, 0.8); }
+.register-input {
+  border-bottom: 1.5px solid #10233F;
+  background: transparent;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+.register-input:focus {
+  outline: none;
+  border-bottom-color: #AD8A4E;
+  box-shadow: 0 1px 0 0 #AD8A4E;
+}
+
+.module-page { @apply space-y-6 animate-fade-in; }
+.module-header { @apply bg-white border border-rule/50 rounded-2xl p-6 shadow-sm; }
+
+.form-input {
+  @apply w-full bg-paper-dark border border-rule rounded-xl px-3.5 py-2.5 text-sm text-navy placeholder:text-rule-dark focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold/20 transition-all duration-150;
+}
+.form-select {
+  @apply w-full bg-paper-dark border border-rule rounded-xl px-3.5 py-2.5 text-xs sm:text-sm font-medium text-navy focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold/25 transition-all duration-200 cursor-pointer shadow-sm;
+}
+.form-label { @apply block text-[11px] font-mono-data font-bold uppercase tracking-wide text-navy/70 mb-1.5; }
+
+.glass {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(201, 194, 178, 0.4);
+}
+
+.nav-item { @apply flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150 cursor-pointer; }
+.nav-item:hover { @apply bg-white/10 text-paper; }
+.nav-item.active { @apply bg-white/20 text-paper font-semibold; }
+
+.animate-fade-in-up-legacy { animation: fadeInUpLegacy 280ms ease-out forwards; }
+@keyframes fadeInUpLegacy { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.stagger-children > *:nth-child(1) { animation-delay: 0ms; }
+.stagger-children > *:nth-child(2) { animation-delay: 60ms; }
+.stagger-children > *:nth-child(3) { animation-delay: 120ms; }
+.stagger-children > *:nth-child(4) { animation-delay: 180ms; }
+
+.empty-state { @apply flex flex-col items-center justify-center py-16 text-center; }
+.empty-state-icon { @apply w-14 h-14 rounded-2xl bg-paper-dark flex items-center justify-center mb-4 text-rule-dark; }
+.empty-state-title { @apply font-display font-bold text-lg text-navy mb-1; }
+.empty-state-desc { @apply text-sm text-navy/50 max-w-xs; }
+
+.approval-card { @apply bg-white rounded-xl border border-rule/50 p-5 hover:shadow-md hover:border-gold/40 transition-all duration-200 cursor-pointer; }
+.approval-card-header { @apply flex items-center justify-between mb-3 pb-3 border-b border-rule/40; }
+
+.status-dot { @apply w-2 h-2 rounded-full inline-block; }
+.status-dot.active { @apply bg-green-register; }
+.status-dot.pending { @apply bg-gold; }
+.status-dot.inactive { @apply bg-rule-dark; }
+
+/* ═══════════════════════════════════════════
+   PRINT STYLES FOR GOVERNMENT REPORT CARD SHEET (SINGLE A4 PAGE)
+   ═══════════════════════════════════════════ */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 5mm 8mm;
+  }
+
+  html, body {
+    height: auto !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+  }
+
+  /* Hide background application UI elements during printing */
+  #root {
+    display: none !important;
+  }
+
+  /* Portal modal containers become clean transparent wrappers */
+  body > div {
+    background: transparent !important;
+    position: static !important;
+    overflow: visible !important;
+    max-height: none !important;
+    height: auto !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  /* Government report sheet styling for 1-page A4 print */
+  #government-report-sheet {
+    display: block !important;
+    position: relative !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 auto !important;
+    padding: 10px 14px !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    border: 2px solid #0f172a !important;
+    box-shadow: none !important;
+    border-radius: 4px !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    page-break-after: avoid !important;
+  }
+  /* Force multi-column side-by-side grid layout in print */
+  #government-report-sheet .grid-cols-3 {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+  #government-report-sheet .grid-cols-4 {
+    display: grid !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  }
+
+  /* Compact spacing for 1-page A4 print fit */
+  #government-report-sheet .mt-5,
+  #government-report-sheet .mt-6 {
+    margin-top: 0.4rem !important;
+  }
+  #government-report-sheet .mt-4 {
+    margin-top: 0.3rem !important;
+  }
+  #government-report-sheet .space-y-4 > :not([hidden]) ~ :not([hidden]) {
+    margin-top: 0.3rem !important;
+  }
+  #government-report-sheet .space-y-3 > :not([hidden]) ~ :not([hidden]) {
+    margin-top: 0.2rem !important;
+  }
+  #government-report-sheet .pb-5 {
+    padding-bottom: 0.4rem !important;
+  }
+  #government-report-sheet .pt-5 {
+    padding-top: 0.4rem !important;
+  }
+  #government-report-sheet .p-4,
+  #government-report-sheet .p-6,
+  #government-report-sheet .p-8 {
+    padding: 0.4rem 0.6rem !important;
+  }
+  #government-report-sheet .p-3 {
+    padding: 0.25rem 0.4rem !important;
+  }
+  #government-report-sheet table td,
+  #government-report-sheet table th {
+    padding-top: 0.2rem !important;
+    padding-bottom: 0.2rem !important;
+  }
+  #government-report-sheet h1 {
+    font-size: 1.25rem !important;
+    line-height: 1.25 !important;
+  }
+  #government-report-sheet .h-12,
+  #government-report-sheet .h-10 {
+    height: 2.2rem !important;
+  }
+  #government-report-sheet img {
+    max-height: 2rem !important;
+  }
+  #government-report-sheet .w-20.h-20 {
+    width: 3.5rem !important;
+    height: 3.5rem !important;
+  }
+}
+

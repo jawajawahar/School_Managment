@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+server/node_modules/
+
+# Environment secrets
+.env
+server/.env
+
+# Build outputs
+dist/
+build/
+*.log
+
+# Flutter
+teacher_app/.dart_tool/
+teacher_app/.pub-cache/
+teacher_app/.pub/
+teacher_app/build/
+teacher_app/ios/Pods/
+teacher_app/ios/.symlinks/
+
+# IDE
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
