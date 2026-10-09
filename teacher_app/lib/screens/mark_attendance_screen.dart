@@ -3,6 +3,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../constants/app_colors.dart';
+import '../models/student_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/attendance_provider.dart';
 import '../widgets/glass_card.dart';
@@ -15,6 +16,13 @@ class MarkAttendanceScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final attProvider = Provider.of<AttendanceProvider>(context);
     final user = Provider.of<AuthProvider>(context).currentUser;
+
+    final totalStudents = attProvider.students.length;
+    final markedStudents = attProvider.students.where((s) =>
+        s.attendanceStatus.isNotEmpty &&
+        s.attendanceStatus != 'unmarked' &&
+        s.attendanceStatus != 'select').length;
+    final isAllMarked = totalStudents > 0 && markedStudents == totalStudents;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -163,17 +171,19 @@ class MarkAttendanceScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 14),
 
-                  // Quick Batch Actions
+                  // Quick Batch Actions (Modern Rounded Pills)
                   Row(
                     children: [
                       _buildQuickActionBtn(
                         label: 'All Present',
+                        icon: Icons.check_circle_rounded,
                         color: AppColors.presentGreen,
                         onTap: () => attProvider.markAll('present'),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 12),
                       _buildQuickActionBtn(
                         label: 'All Absent',
+                        icon: Icons.cancel_rounded,
                         color: AppColors.absentRed,
                         onTap: () => attProvider.markAll('absent'),
                       ),
@@ -189,140 +199,165 @@ class MarkAttendanceScreen extends StatelessWidget {
             Expanded(
               child: attProvider.isLoadingStudents
                   ? const Center(child: CircularProgressIndicator())
-                  : ListView.builder(
-                      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-                      padding: const EdgeInsets.all(16),
-                      itemCount: attProvider.students.length,
-                      itemBuilder: (context, index) {
-                        final student = attProvider.students[index];
-                        return GlassCard(
-                          margin: const EdgeInsets.only(bottom: 10),
-                          padding: const EdgeInsets.all(14),
-                          child: Row(
-                            children: [
-                              CircleAvatar(
-                                radius: 20,
-                                backgroundColor: AppColors.primary.withValues(alpha: 0.1),
-                                child: Text(
-                                  '${index + 1}',
-                                  style: GoogleFonts.outfit(
-                                    color: AppColors.primary,
-                                    fontWeight: FontWeight.w900,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      student.fullName,
-                                      style: GoogleFonts.outfit(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w800,
-                                        color: AppColors.textPrimary,
-                                      ),
-                                    ),
-                                    Text(
-                                      student.studentNo,
-                                      style: GoogleFonts.inter(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w500,
-                                        color: AppColors.textMuted,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-
-                              // Status Selector Pill Buttons
-                              Row(
+                  : attProvider.students.isEmpty
+                      ? Center(
+                          child: Text(
+                            'No students enrolled in this class.',
+                            style: GoogleFonts.inter(color: AppColors.textMuted, fontSize: 14),
+                          ),
+                        )
+                      : ListView.builder(
+                          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                          padding: const EdgeInsets.all(16),
+                          itemCount: attProvider.students.length,
+                          itemBuilder: (context, index) {
+                            final student = attProvider.students[index];
+                            return GlassCard(
+                              margin: const EdgeInsets.only(bottom: 10),
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                              child: Row(
                                 children: [
-                                  _buildStatusTogglePill(
-                                    label: 'P',
-                                    statusKey: 'present',
-                                    activeColor: AppColors.presentGreen,
-                                    student: student,
-                                    onTap: () => attProvider.updateStudentStatus(student.id, 'present'),
+                                  CircleAvatar(
+                                    radius: 20,
+                                    backgroundColor: AppColors.primary.withValues(alpha: 0.1),
+                                    child: Text(
+                                      '${index + 1}',
+                                      style: GoogleFonts.outfit(
+                                        color: AppColors.primary,
+                                        fontWeight: FontWeight.w900,
+                                      ),
+                                    ),
                                   ),
-                                  _buildStatusTogglePill(
-                                    label: 'A',
-                                    statusKey: 'absent',
-                                    activeColor: AppColors.absentRed,
-                                    student: student,
-                                    onTap: () => attProvider.updateStudentStatus(student.id, 'absent'),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          student.fullName,
+                                          style: GoogleFonts.outfit(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w800,
+                                            color: AppColors.textPrimary,
+                                          ),
+                                        ),
+                                        Text(
+                                          student.studentNo,
+                                          style: GoogleFonts.inter(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w500,
+                                            color: AppColors.textMuted,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                  _buildStatusTogglePill(
-                                    label: 'L',
-                                    statusKey: 'late',
-                                    activeColor: AppColors.lateOrange,
-                                    student: student,
-                                    onTap: () => attProvider.updateStudentStatus(student.id, 'late'),
-                                  ),
-                                  _buildStatusTogglePill(
-                                    label: 'E',
-                                    statusKey: 'excused',
-                                    activeColor: AppColors.excusedBlue,
-                                    student: student,
-                                    onTap: () => attProvider.updateStudentStatus(student.id, 'excused'),
-                                  ),
+
+                                  // Modern Status Selector Dropdown
+                                  _buildStatusDropdownSelector(context, student, attProvider),
                                 ],
+                              ),
+                            ).animate().fade(duration: 300.ms, delay: Duration(milliseconds: index * 25));
+                          },
+                        ),
+            ),
+
+            // Save Attendance Footer (Only visible when ALL students are marked)
+            AnimatedCrossFade(
+              duration: 300.ms,
+              crossFadeState: isAllMarked ? CrossFadeState.showFirst : CrossFadeState.showSecond,
+              firstChild: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  boxShadow: AppColors.softShadow,
+                ),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton(
+                    onPressed: attProvider.isSubmitting
+                        ? null
+                        : () async {
+                            final teacherName = user?.fullName ?? 'Teacher';
+                            final ok = await attProvider.submitAttendance(teacherName);
+                            if (ok && context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(attProvider.message ?? 'Attendance saved!'),
+                                  backgroundColor: AppColors.presentGreen,
+                                ),
+                              );
+                            }
+                          },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      elevation: 4,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    ),
+                    child: attProvider.isSubmitting
+                        ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white))
+                        : Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.cloud_upload_rounded, color: Colors.white, size: 20),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Save Daily Attendance Register',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w900,
+                                  color: Colors.white,
+                                ),
                               ),
                             ],
                           ),
-                        ).animate().fade(duration: 300.ms, delay: Duration(milliseconds: index * 30));
-                      },
-                    ),
-            ),
-
-            // Save Attendance Footer Button
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                boxShadow: AppColors.softShadow,
-              ),
-              child: SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: ElevatedButton(
-                  onPressed: attProvider.isSubmitting
-                      ? null
-                      : () async {
-                          final teacherName = user?.fullName ?? 'Mrs. Sarah Perera';
-                          final ok = await attProvider.submitAttendance(teacherName);
-                          if (ok && context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(attProvider.message ?? 'Attendance saved!'),
-                                backgroundColor: AppColors.presentGreen,
-                              ),
-                            );
-                          }
-                        },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    elevation: 4,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   ),
-                  child: attProvider.isSubmitting
-                      ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white))
-                      : Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(Icons.cloud_upload_rounded, color: Colors.white, size: 20),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Save Daily Attendance Register',
-                              style: GoogleFonts.outfit(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w900,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ],
-                        ),
+                ),
+              ),
+              secondChild: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  boxShadow: AppColors.softShadow,
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppColors.accentAmber.withValues(alpha: 0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.assignment_late_rounded, color: AppColors.accentAmber, size: 20),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'Mark All Students to Save',
+                            style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.textPrimary),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '$markedStudents of $totalStudents students marked',
+                            style: GoogleFonts.inter(fontWeight: FontWeight.w500, fontSize: 12, color: AppColors.textSecondary),
+                          ),
+                        ],
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: () => attProvider.markAll('present'),
+                      icon: const Icon(Icons.done_all_rounded, size: 16, color: AppColors.primary),
+                      label: Text(
+                        'Mark All',
+                        style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.primary),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -334,23 +369,37 @@ class MarkAttendanceScreen extends StatelessWidget {
 
   Widget _buildQuickActionBtn({
     required String label,
+    required IconData icon,
     required Color color,
     required VoidCallback onTap,
   }) {
     return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: color.withValues(alpha: 0.3)),
-          ),
-          child: Center(
-            child: Text(
-              label,
-              style: GoogleFonts.inter(color: color, fontWeight: FontWeight.bold, fontSize: 12),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(30),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(30),
+              border: Border.all(color: color.withValues(alpha: 0.28), width: 1.2),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, color: color, size: 18),
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: GoogleFonts.outfit(
+                    color: color,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -358,37 +407,117 @@ class MarkAttendanceScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildStatusTogglePill({
-    required String label,
-    required String statusKey,
-    required Color activeColor,
-    required dynamic student,
-    required VoidCallback onTap,
-  }) {
-    final isSelected = student.attendanceStatus == statusKey;
+  Widget _buildStatusDropdownSelector(BuildContext context, StudentModel student, AttendanceProvider attProvider) {
+    Color bg;
+    Color border;
+    Color textCol;
+    IconData icon;
+    String label;
 
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.only(left: 4),
-        width: 30,
-        height: 30,
+    switch (student.attendanceStatus.toLowerCase()) {
+      case 'present':
+        bg = const Color(0xFFDCFCE7);
+        border = const Color(0xFF86EFAC);
+        textCol = const Color(0xFF15803D);
+        icon = Icons.check_circle_rounded;
+        label = 'Present';
+        break;
+      case 'absent':
+        bg = const Color(0xFFFEE2E2);
+        border = const Color(0xFFFCA5A5);
+        textCol = const Color(0xFFB91C1C);
+        icon = Icons.cancel_rounded;
+        label = 'Absent';
+        break;
+      case 'late':
+        bg = const Color(0xFFFFEDD5);
+        border = const Color(0xFFFDBA74);
+        textCol = const Color(0xFFC2410C);
+        icon = Icons.access_time_filled_rounded;
+        label = 'Late';
+        break;
+      case 'excused':
+        bg = const Color(0xFFDBEAFE);
+        border = const Color(0xFF93C5FD);
+        textCol = const Color(0xFF1D4ED8);
+        icon = Icons.info_rounded;
+        label = 'Excused';
+        break;
+      default:
+        bg = Colors.grey.shade100;
+        border = Colors.grey.shade300;
+        textCol = AppColors.textMuted;
+        icon = Icons.help_outline_rounded;
+        label = 'Select';
+    }
+
+    return PopupMenuButton<String>(
+      onSelected: (val) {
+        attProvider.updateStudentStatus(student.id, val);
+      },
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      elevation: 6,
+      offset: const Offset(0, 40),
+      itemBuilder: (ctx) => [
+        _buildPopupMenuItem('present', 'Present', Icons.check_circle_rounded, const Color(0xFF15803D), const Color(0xFFDCFCE7)),
+        _buildPopupMenuItem('absent', 'Absent', Icons.cancel_rounded, const Color(0xFFB91C1C), const Color(0xFFFEE2E2)),
+        _buildPopupMenuItem('late', 'Late', Icons.access_time_filled_rounded, const Color(0xFFC2410C), const Color(0xFFFFEDD5)),
+        _buildPopupMenuItem('excused', 'Excused', Icons.info_rounded, const Color(0xFF1D4ED8), const Color(0xFFDBEAFE)),
+      ],
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
         decoration: BoxDecoration(
-          color: isSelected ? activeColor : Colors.grey.shade100,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: isSelected ? activeColor : Colors.grey.shade300,
-          ),
-        ),
-        child: Center(
-          child: Text(
-            label,
-            style: GoogleFonts.outfit(
-              color: isSelected ? Colors.white : AppColors.textSecondary,
-              fontWeight: FontWeight.bold,
-              fontSize: 13,
+          color: bg,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: border, width: 1.2),
+          boxShadow: [
+            BoxShadow(
+              color: textCol.withValues(alpha: 0.08),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
             ),
-          ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16, color: textCol),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: GoogleFonts.outfit(
+                color: textCol,
+                fontWeight: FontWeight.w800,
+                fontSize: 13,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Icon(Icons.unfold_more_rounded, size: 16, color: textCol.withValues(alpha: 0.8)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  PopupMenuItem<String> _buildPopupMenuItem(String value, String title, IconData icon, Color color, Color bg) {
+    return PopupMenuItem<String>(
+      value: value,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: bg.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: color, size: 18),
+            const SizedBox(width: 10),
+            Text(
+              title,
+              style: GoogleFonts.outfit(color: color, fontWeight: FontWeight.bold, fontSize: 14),
+            ),
+          ],
         ),
       ),
     );

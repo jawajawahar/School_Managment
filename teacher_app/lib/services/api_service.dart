@@ -75,19 +75,31 @@ class ApiService {
               final attRes = await client.get(attUrl, headers: headers);
               if (attRes.statusCode == 200) {
                 final List attList = jsonDecode(attRes.body);
-                final Map<String, String> attMap = {};
-                for (var item in attList) {
-                  final sId = item['studentId'] ?? item['studentNo'];
-                  if (sId != null && item['status'] != null) {
-                    attMap[sId.toString()] = item['status'].toString();
+                if (attList.isNotEmpty) {
+                  final Map<String, String> attMap = {};
+                  for (var item in attList) {
+                    final sId = item['studentId'] ?? item['studentNo'];
+                    if (sId != null && item['status'] != null) {
+                      attMap[sId.toString()] = item['status'].toString();
+                    }
+                  }
+                  for (var student in students) {
+                    if (attMap.containsKey(student.id)) {
+                      student.attendanceStatus = attMap[student.id]!;
+                    } else if (attMap.containsKey(student.studentNo)) {
+                      student.attendanceStatus = attMap[student.studentNo]!;
+                    } else {
+                      student.attendanceStatus = 'unmarked';
+                    }
+                  }
+                } else {
+                  for (var student in students) {
+                    student.attendanceStatus = 'unmarked';
                   }
                 }
+              } else {
                 for (var student in students) {
-                  if (attMap.containsKey(student.id)) {
-                    student.attendanceStatus = attMap[student.id]!;
-                  } else if (attMap.containsKey(student.studentNo)) {
-                    student.attendanceStatus = attMap[student.studentNo]!;
-                  }
+                  student.attendanceStatus = 'unmarked';
                 }
               }
             } catch (e) {
