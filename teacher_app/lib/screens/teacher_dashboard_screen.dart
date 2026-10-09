@@ -8,6 +8,7 @@ import '../providers/attendance_provider.dart';
 import '../providers/leave_provider.dart';
 import '../providers/notification_provider.dart';
 import '../widgets/glass_card.dart';
+import '../widgets/server_settings_dialog.dart';
 import 'login_screen.dart';
 
 class TeacherDashboardScreen extends StatefulWidget {
@@ -130,6 +131,23 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                         ),
                       ),
                       const SizedBox(width: 8),
+                      IconButton(
+                        icon: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withValues(alpha: 0.12),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.dns_rounded,
+                            color: AppColors.primary,
+                            size: 18,
+                          ),
+                        ),
+                        tooltip: 'Server Settings',
+                        onPressed: () => ServerSettingsDialog.show(context),
+                      ),
+                      const SizedBox(width: 4),
                       IconButton(
                         icon: Container(
                           padding: const EdgeInsets.all(8),

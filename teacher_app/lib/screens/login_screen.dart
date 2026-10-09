@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../constants/app_colors.dart';
 import '../providers/auth_provider.dart';
 import '../providers/attendance_provider.dart';
+import '../widgets/server_settings_dialog.dart';
 import 'main_navigation_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -34,7 +35,6 @@ class _LoginScreenState extends State<LoginScreen> {
     final success = await auth.login(email, password);
 
     if (success && mounted) {
-      // Sync teacher assigned class to attendance provider
       final attProvider = Provider.of<AttendanceProvider>(context, listen: false);
       final assignedClass = auth.currentUser?.assignedClassId;
       await attProvider.loadClasses(preferredClassId: assignedClass);
@@ -66,12 +66,23 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ),
         child: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
+          child: Stack(
+            children: [
+              Positioned(
+                top: 10,
+                right: 16,
+                child: IconButton(
+                  icon: const Icon(Icons.settings_rounded, color: Colors.white70, size: 28),
+                  tooltip: 'Server Settings',
+                  onPressed: () => ServerSettingsDialog.show(context),
+                ),
+              ),
+              Center(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
                   // Logo Icon Badge
                   Container(
                     width: 90,
@@ -252,8 +263,10 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
           ),
-        ),
+        ],
       ),
-    );
-  }
+    ),
+  ),
+);
+}
 }

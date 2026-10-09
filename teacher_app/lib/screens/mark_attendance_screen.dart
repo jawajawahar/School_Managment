@@ -7,6 +7,7 @@ import '../constants/app_colors.dart';
 import '../providers/auth_provider.dart';
 import '../providers/attendance_provider.dart';
 import '../widgets/glass_card.dart';
+import '../widgets/server_settings_dialog.dart';
 
 class MarkAttendanceScreen extends StatelessWidget {
   const MarkAttendanceScreen({super.key});
@@ -28,11 +29,15 @@ class MarkAttendanceScreen extends StatelessWidget {
         centerTitle: false,
         actions: [
           IconButton(
+            icon: const Icon(Icons.settings_rounded, color: AppColors.primary),
+            tooltip: 'Server Settings',
+            onPressed: () => ServerSettingsDialog.show(context),
+          ),
+          IconButton(
             icon: const Icon(Icons.refresh_rounded, color: AppColors.primary),
+            tooltip: 'Refresh Classes & Students',
             onPressed: () {
-              if (attProvider.selectedClassId != null) {
-                attProvider.loadStudentsForClass(attProvider.selectedClassId!);
-              }
+              attProvider.loadClasses(preferredClassId: user?.assignedClassId);
             },
           ),
         ],
