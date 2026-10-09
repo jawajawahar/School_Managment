@@ -29,7 +29,7 @@ https.get(options, (res) => {
     try {
       const data = JSON.parse(body);
       const artifacts = data.artifacts || [];
-      const ipaArtifact = artifacts.find((a) => a.name === 'GSMS_Teacher_App_IPA');
+      const ipaArtifact = artifacts.find((a) => a.name === 'GSMS_Teacher_App_IPA' || a.name === 'GSMS_Teacher_App_iOS_IPA');
 
       if (!ipaArtifact) {
         console.log('⚠️ No IPA artifact found yet. Please wait for GitHub Actions build to complete.');

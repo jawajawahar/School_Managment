@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import 'package:percent_indicator/linear_percent_indicator.dart';
 import '../constants/app_colors.dart';
 import '../providers/auth_provider.dart';
 import '../providers/attendance_provider.dart';
@@ -110,33 +109,6 @@ class MarkAttendanceScreen extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 14),
-
-                  // Telemetry Bar
-                  Row(
-                    children: [
-                      Expanded(
-                        child: LinearPercentIndicator(
-                          lineHeight: 12.0,
-                          percent: (attProvider.attendancePercentage / 100).clamp(0.0, 1.0),
-                          backgroundColor: Colors.grey.shade200,
-                          progressColor: AppColors.primary,
-                          barRadius: const Radius.circular(6),
-                          padding: EdgeInsets.zero,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Text(
-                        '${attProvider.presentCount}/${attProvider.totalStudents} Present (${attProvider.attendancePercentage.toStringAsFixed(0)}%)',
-                        style: GoogleFonts.outfit(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 12),
 
                   // Quick Batch Actions
                   Row(
