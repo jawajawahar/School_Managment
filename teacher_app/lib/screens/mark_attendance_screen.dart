@@ -22,7 +22,7 @@ class MarkAttendanceScreen extends StatelessWidget {
       appBar: AppBar(
         title: Text(
           'Mark Daily Attendance',
-          style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+          style: GoogleFonts.outfit(fontWeight: FontWeight.w800, color: AppColors.textPrimary, fontSize: 20),
         ),
         backgroundColor: Colors.white,
         elevation: 0.5,
@@ -48,7 +48,7 @@ class MarkAttendanceScreen extends StatelessWidget {
             // Controls Card (Class Selector & Batch Buttons)
             Container(
               color: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
               child: Column(
                 children: [
                   Row(
@@ -56,23 +56,23 @@ class MarkAttendanceScreen extends StatelessWidget {
                       // Class Dropdown
                       Expanded(
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          padding: const EdgeInsets.symmetric(horizontal: 14),
                           decoration: BoxDecoration(
                             color: AppColors.background,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.black.withOpacity(0.08)),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: AppColors.primary.withValues(alpha: 0.15)),
                           ),
                           child: DropdownButtonHideUnderline(
                             child: DropdownButton<String>(
                               value: attProvider.selectedClassId,
                               isExpanded: true,
-                              hint: const Text('Select Class'),
+                              hint: Text('Select Class', style: GoogleFonts.outfit(fontWeight: FontWeight.w600)),
                               items: attProvider.classes.map((c) {
                                 return DropdownMenuItem<String>(
                                   value: c['id'],
                                   child: Text(
                                     '${c['grade']} (${c['section']})',
-                                    style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 14),
+                                    style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 15, color: AppColors.textPrimary),
                                   ),
                                 );
                               }).toList(),
@@ -88,8 +88,9 @@ class MarkAttendanceScreen extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                         decoration: BoxDecoration(
-                          color: AppColors.primary.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(12),
+                          color: AppColors.primary.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
                         ),
                         child: Row(
                           children: [
@@ -97,9 +98,9 @@ class MarkAttendanceScreen extends StatelessWidget {
                             const SizedBox(width: 6),
                             Text(
                               attProvider.selectedDate,
-                              style: GoogleFonts.inter(
+                              style: GoogleFonts.outfit(
                                 color: AppColors.primary,
-                                fontWeight: FontWeight.bold,
+                                fontWeight: FontWeight.w800,
                                 fontSize: 13,
                               ),
                             ),
@@ -108,34 +109,34 @@ class MarkAttendanceScreen extends StatelessWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 14),
 
                   // Telemetry Bar
                   Row(
                     children: [
                       Expanded(
                         child: LinearPercentIndicator(
-                          lineHeight: 10.0,
+                          lineHeight: 12.0,
                           percent: (attProvider.attendancePercentage / 100).clamp(0.0, 1.0),
                           backgroundColor: Colors.grey.shade200,
-                          progressColor: AppColors.presentGreen,
-                          barRadius: const Radius.circular(5),
+                          progressColor: AppColors.primary,
+                          barRadius: const Radius.circular(6),
                           padding: EdgeInsets.zero,
                         ),
                       ),
                       const SizedBox(width: 12),
                       Text(
                         '${attProvider.presentCount}/${attProvider.totalStudents} Present (${attProvider.attendancePercentage.toStringAsFixed(0)}%)',
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
+                        style: GoogleFonts.outfit(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
                           color: AppColors.textPrimary,
                         ),
                       ),
                     ],
                   ),
 
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 12),
 
                   // Quick Batch Actions
                   Row(
@@ -176,12 +177,12 @@ class MarkAttendanceScreen extends StatelessWidget {
                             children: [
                               CircleAvatar(
                                 radius: 20,
-                                backgroundColor: AppColors.primary.withOpacity(0.1),
+                                backgroundColor: AppColors.primary.withValues(alpha: 0.1),
                                 child: Text(
                                   '${index + 1}',
                                   style: GoogleFonts.outfit(
                                     color: AppColors.primary,
-                                    fontWeight: FontWeight.bold,
+                                    fontWeight: FontWeight.w900,
                                   ),
                                 ),
                               ),
@@ -193,8 +194,8 @@ class MarkAttendanceScreen extends StatelessWidget {
                                     Text(
                                       student.fullName,
                                       style: GoogleFonts.outfit(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w800,
                                         color: AppColors.textPrimary,
                                       ),
                                     ),
@@ -202,6 +203,7 @@ class MarkAttendanceScreen extends StatelessWidget {
                                       student.studentNo,
                                       style: GoogleFonts.inter(
                                         fontSize: 12,
+                                        fontWeight: FontWeight.w500,
                                         color: AppColors.textMuted,
                                       ),
                                     ),
@@ -258,7 +260,7 @@ class MarkAttendanceScreen extends StatelessWidget {
               ),
               child: SizedBox(
                 width: double.infinity,
-                height: 50,
+                height: 52,
                 child: ElevatedButton(
                   onPressed: attProvider.isSubmitting
                       ? null
@@ -276,6 +278,7 @@ class MarkAttendanceScreen extends StatelessWidget {
                         },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
+                    elevation: 4,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   ),
                   child: attProvider.isSubmitting
@@ -289,7 +292,7 @@ class MarkAttendanceScreen extends StatelessWidget {
                               'Save Daily Attendance Register',
                               style: GoogleFonts.outfit(
                                 fontSize: 16,
-                                fontWeight: FontWeight.bold,
+                                fontWeight: FontWeight.w900,
                                 color: Colors.white,
                               ),
                             ),
@@ -315,9 +318,9 @@ class MarkAttendanceScreen extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 6),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.12),
+            color: color.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: color.withOpacity(0.3)),
+            border: Border.all(color: color.withValues(alpha: 0.3)),
           ),
           child: Center(
             child: Text(

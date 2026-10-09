@@ -68,7 +68,7 @@ class _SendAlertScreenState extends State<SendAlertScreen> {
       appBar: AppBar(
         title: Text(
           'Principal Alerts & Messages',
-          style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+          style: GoogleFonts.outfit(fontWeight: FontWeight.w800, color: AppColors.textPrimary, fontSize: 20),
         ),
         backgroundColor: Colors.white,
         elevation: 0.5,
@@ -92,7 +92,7 @@ class _SendAlertScreenState extends State<SendAlertScreen> {
                         Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: AppColors.accentTeal.withOpacity(0.12),
+                            color: AppColors.accentTeal.withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: const Icon(Icons.add_alert_rounded, color: AppColors.accentTeal),
@@ -105,13 +105,13 @@ class _SendAlertScreenState extends State<SendAlertScreen> {
                               'Notify Principal Office',
                               style: GoogleFonts.outfit(
                                 fontSize: 18,
-                                fontWeight: FontWeight.bold,
+                                fontWeight: FontWeight.w800,
                                 color: AppColors.textPrimary,
                               ),
                             ),
                             Text(
                               'Send priority alert or request',
-                              style: GoogleFonts.inter(fontSize: 12, color: AppColors.textMuted),
+                              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w500, color: AppColors.textMuted),
                             ),
                           ],
                         ),
@@ -122,7 +122,7 @@ class _SendAlertScreenState extends State<SendAlertScreen> {
                     // Category Pill Selector
                     Text(
                       'Category / Priority',
-                      style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600),
+                      style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w800, color: AppColors.textPrimary),
                     ),
                     const SizedBox(height: 8),
                     Row(
@@ -140,7 +140,7 @@ class _SendAlertScreenState extends State<SendAlertScreen> {
                     // Subject / Title Field
                     Text(
                       'Alert Title',
-                      style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600),
+                      style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w800, color: AppColors.textPrimary),
                     ),
                     const SizedBox(height: 6),
                     TextField(
@@ -161,7 +161,7 @@ class _SendAlertScreenState extends State<SendAlertScreen> {
                     // Detailed Message Field
                     Text(
                       'Detailed Notification Message',
-                      style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600),
+                      style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w800, color: AppColors.textPrimary),
                     ),
                     const SizedBox(height: 6),
                     TextField(
@@ -183,11 +183,12 @@ class _SendAlertScreenState extends State<SendAlertScreen> {
                     // Send Button
                     SizedBox(
                       width: double.infinity,
-                      height: 48,
+                      height: 50,
                       child: ElevatedButton(
                         onPressed: notifProvider.isSending ? null : _sendAlert,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.accentTeal,
+                          backgroundColor: AppColors.primary,
+                          elevation: 3,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
                         child: notifProvider.isSending
@@ -199,7 +200,7 @@ class _SendAlertScreenState extends State<SendAlertScreen> {
                                   const SizedBox(width: 8),
                                   Text(
                                     'Dispatch Alert to Principal',
-                                    style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
+                                    style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w900, color: Colors.white),
                                   ),
                                 ],
                               ),
@@ -241,7 +242,7 @@ class _SendAlertScreenState extends State<SendAlertScreen> {
                             Container(
                               padding: const EdgeInsets.all(6),
                               decoration: BoxDecoration(
-                                color: ann.isEmergency ? AppColors.absentRed.withOpacity(0.12) : AppColors.primary.withOpacity(0.12),
+                                color: ann.isEmergency ? AppColors.absentRed.withValues(alpha: 0.12) : AppColors.primary.withValues(alpha: 0.12),
                                 shape: BoxShape.circle,
                               ),
                               child: Icon(
@@ -296,9 +297,9 @@ class _SendAlertScreenState extends State<SendAlertScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: isSelected ? color : color.withOpacity(0.08),
+          color: isSelected ? color : color.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: color.withOpacity(0.4)),
+          border: Border.all(color: color.withValues(alpha: 0.4)),
         ),
         child: Row(
           children: [

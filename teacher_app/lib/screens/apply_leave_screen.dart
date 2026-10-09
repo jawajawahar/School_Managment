@@ -90,7 +90,7 @@ class _ApplyLeaveScreenState extends State<ApplyLeaveScreen> {
       appBar: AppBar(
         title: Text(
           'Apply for Leave',
-          style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+          style: GoogleFonts.outfit(fontWeight: FontWeight.w800, color: AppColors.textPrimary, fontSize: 20),
         ),
         backgroundColor: Colors.white,
         elevation: 0.5,
@@ -116,7 +116,7 @@ class _ApplyLeaveScreenState extends State<ApplyLeaveScreen> {
                           'New Leave Application',
                           style: GoogleFonts.outfit(
                             fontSize: 18,
-                            fontWeight: FontWeight.bold,
+                            fontWeight: FontWeight.w800,
                             color: AppColors.textPrimary,
                           ),
                         ),
@@ -127,7 +127,7 @@ class _ApplyLeaveScreenState extends State<ApplyLeaveScreen> {
                     // Leave Type Dropdown
                     Text(
                       'Leave Type',
-                      style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                      style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w800, color: AppColors.textPrimary),
                     ),
                     const SizedBox(height: 6),
                     Container(
@@ -144,7 +144,7 @@ class _ApplyLeaveScreenState extends State<ApplyLeaveScreen> {
                           items: ['Casual Leave', 'Sick Leave', 'Duty Leave', 'Half Day'].map((type) {
                             return DropdownMenuItem(
                               value: type,
-                              child: Text(type, style: GoogleFonts.inter(fontSize: 14)),
+                              child: Text(type, style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w700)),
                             );
                           }).toList(),
                           onChanged: (val) {
@@ -165,7 +165,7 @@ class _ApplyLeaveScreenState extends State<ApplyLeaveScreen> {
                             children: [
                               Text(
                                 'Start Date',
-                                style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600),
+                                style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w800, color: AppColors.textPrimary),
                               ),
                               const SizedBox(height: 6),
                               InkWell(
@@ -183,7 +183,7 @@ class _ApplyLeaveScreenState extends State<ApplyLeaveScreen> {
                                       const SizedBox(width: 8),
                                       Text(
                                         DateFormat('dd MMM yyyy').format(_startDate),
-                                        style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600),
+                                        style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w800),
                                       ),
                                     ],
                                   ),
@@ -199,7 +199,7 @@ class _ApplyLeaveScreenState extends State<ApplyLeaveScreen> {
                             children: [
                               Text(
                                 'End Date',
-                                style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600),
+                                style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w800, color: AppColors.textPrimary),
                               ),
                               const SizedBox(height: 6),
                               InkWell(
@@ -217,7 +217,7 @@ class _ApplyLeaveScreenState extends State<ApplyLeaveScreen> {
                                       const SizedBox(width: 8),
                                       Text(
                                         DateFormat('dd MMM yyyy').format(_endDate),
-                                        style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600),
+                                        style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w800),
                                       ),
                                     ],
                                   ),
@@ -234,7 +234,7 @@ class _ApplyLeaveScreenState extends State<ApplyLeaveScreen> {
                     // Reason Field
                     Text(
                       'Reason for Leave',
-                      style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600),
+                      style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w800, color: AppColors.textPrimary),
                     ),
                     const SizedBox(height: 6),
                     TextField(
@@ -256,11 +256,12 @@ class _ApplyLeaveScreenState extends State<ApplyLeaveScreen> {
                     // Submit Button
                     SizedBox(
                       width: double.infinity,
-                      height: 48,
+                      height: 50,
                       child: ElevatedButton(
                         onPressed: leaveProvider.isSubmitting ? null : _submitForm,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.accentAmber,
+                          backgroundColor: AppColors.primary,
+                          elevation: 3,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
                         child: leaveProvider.isSubmitting
@@ -272,7 +273,7 @@ class _ApplyLeaveScreenState extends State<ApplyLeaveScreen> {
                                   const SizedBox(width: 8),
                                   Text(
                                     'Submit Request to Principal',
-                                    style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
+                                    style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w900, color: Colors.white),
                                   ),
                                 ],
                               ),

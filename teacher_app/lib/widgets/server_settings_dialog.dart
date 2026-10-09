@@ -79,7 +79,7 @@ class _ServerSettingsDialogState extends State<ServerSettingsDialog> {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.1),
+              color: AppColors.primary.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(Icons.dns_rounded, color: AppColors.primary),
@@ -122,7 +122,7 @@ class _ServerSettingsDialogState extends State<ServerSettingsDialog> {
                 contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.black.withOpacity(0.1)),
+                  borderSide: BorderSide(color: Colors.black.withValues(alpha: 0.1)),
                 ),
               ),
               style: GoogleFonts.inter(fontSize: 14),
@@ -141,7 +141,7 @@ class _ServerSettingsDialogState extends State<ServerSettingsDialog> {
                   avatar: const Icon(Icons.wifi_rounded, size: 14, color: AppColors.primary),
                   label: Text('Hotspot (172.20.10.3)', style: GoogleFonts.inter(fontSize: 11)),
                   onPressed: () => _applyPreset('http://172.20.10.3:5000/api'),
-                  backgroundColor: AppColors.primary.withOpacity(0.08),
+                  backgroundColor: AppColors.primary.withValues(alpha: 0.08),
                 ),
                 ActionChip(
                   avatar: const Icon(Icons.computer_rounded, size: 14, color: AppColors.textSecondary),
@@ -156,7 +156,7 @@ class _ServerSettingsDialogState extends State<ServerSettingsDialog> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: _isSuccess ? AppColors.presentGreen.withOpacity(0.12) : AppColors.absentRed.withOpacity(0.12),
+                  color: _isSuccess ? AppColors.presentGreen.withValues(alpha: 0.12) : AppColors.absentRed.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
                     color: _isSuccess ? AppColors.presentGreen : AppColors.absentRed,

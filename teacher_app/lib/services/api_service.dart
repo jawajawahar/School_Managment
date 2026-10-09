@@ -91,7 +91,7 @@ class ApiService {
                 }
               }
             } catch (e) {
-              print('Attendance fetch error: $e');
+              debugPrint('Attendance fetch error: $e');
             }
           }
 

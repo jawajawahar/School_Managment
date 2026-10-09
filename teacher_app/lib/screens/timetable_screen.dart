@@ -48,7 +48,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
       appBar: AppBar(
         title: Text(
           'Weekly Teaching Timetable',
-          style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+          style: GoogleFonts.outfit(fontWeight: FontWeight.w800, color: AppColors.textPrimary, fontSize: 20),
         ),
         backgroundColor: Colors.white,
         elevation: 0.5,
@@ -81,7 +81,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
                         _days[index],
                         style: GoogleFonts.outfit(
                           fontSize: 14,
-                          fontWeight: FontWeight.bold,
+                          fontWeight: FontWeight.w900,
                           color: isSelected ? Colors.white : AppColors.textSecondary,
                         ),
                       ),
@@ -125,20 +125,20 @@ class _TimetableScreenState extends State<TimetableScreen> {
                                   Container(
                                     padding: const EdgeInsets.all(12),
                                     decoration: BoxDecoration(
-                                      color: AppColors.primary.withOpacity(0.12),
+                                      color: AppColors.primary.withValues(alpha: 0.12),
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: Column(
                                       children: [
                                         Text(
                                           'Period',
-                                          style: GoogleFonts.inter(fontSize: 10, color: AppColors.primary),
+                                          style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.primary),
                                         ),
                                         Text(
                                           '${slot.periodNo}',
                                           style: GoogleFonts.outfit(
-                                            fontSize: 20,
-                                            fontWeight: FontWeight.bold,
+                                            fontSize: 22,
+                                            fontWeight: FontWeight.w900,
                                             color: AppColors.primary,
                                           ),
                                         ),
@@ -155,8 +155,8 @@ class _TimetableScreenState extends State<TimetableScreen> {
                                         Text(
                                           slot.subjectId,
                                           style: GoogleFonts.outfit(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
+                                            fontSize: 17,
+                                            fontWeight: FontWeight.w800,
                                             color: AppColors.textPrimary,
                                           ),
                                         ),
@@ -174,7 +174,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
                                             const SizedBox(width: 4),
                                             Text(
                                               slot.room,
-                                              style: GoogleFonts.inter(fontSize: 13, color: AppColors.accentTeal, fontWeight: FontWeight.bold),
+                                              style: GoogleFonts.outfit(fontSize: 13, color: AppColors.accentTeal, fontWeight: FontWeight.w800),
                                             ),
                                           ],
                                         ),

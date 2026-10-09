@@ -153,7 +153,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                             Container(
                               padding: const EdgeInsets.all(8),
                               decoration: BoxDecoration(
-                                color: AppColors.primary.withOpacity(0.1),
+                                color: AppColors.primary.withValues(alpha: 0.1),
                                 shape: BoxShape.circle,
                               ),
                               child: const Icon(
@@ -238,14 +238,21 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
 
               const SizedBox(height: 20),
 
-              // Main Class Overview Card
+              // Main Class Overview Card (Midnight Obsidian Luxury Theme)
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.all(22),
                 decoration: BoxDecoration(
                   gradient: AppColors.primaryGradient,
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: AppColors.primaryShadow,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.12), width: 1.5),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF1E1B4B).withValues(alpha: 0.4),
+                      blurRadius: 24,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -254,25 +261,33 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                           decoration: BoxDecoration(
-                            color: Colors.white24,
-                            borderRadius: BorderRadius.circular(12),
+                            color: Colors.white.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
                           ),
                           child: Text(
                             classBadgeLabel,
                             style: GoogleFonts.inter(
                               color: Colors.white,
                               fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 0.8,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1.0,
                             ),
                           ),
                         ),
-                        const Icon(Icons.verified_rounded, color: Colors.amberAccent, size: 20),
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.withValues(alpha: 0.2),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.verified_rounded, color: Colors.amberAccent, size: 20),
+                        ),
                       ],
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 20),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       crossAxisAlignment: CrossAxisAlignment.end,
@@ -282,15 +297,20 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                           children: [
                             Text(
                               'Overall Attendance Rate',
-                              style: GoogleFonts.inter(color: Colors.white70, fontSize: 13),
+                              style: GoogleFonts.inter(
+                                color: Colors.white.withValues(alpha: 0.8),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                             const SizedBox(height: 4),
                             Text(
                               '${attProvider.attendancePercentage.toStringAsFixed(0)}%',
                               style: GoogleFonts.outfit(
                                 color: Colors.white,
-                                fontSize: 38,
-                                fontWeight: FontWeight.bold,
+                                fontSize: 44,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: -1.0,
                               ),
                             ),
                           ],
@@ -299,15 +319,20 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                           onPressed: () => widget.onNavigate?.call(1),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.white,
-                            foregroundColor: AppColors.primary,
-                            elevation: 0,
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            foregroundColor: AppColors.primaryDark,
+                            elevation: 4,
+                            shadowColor: Colors.black38,
+                            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                           ),
-                          icon: const Icon(Icons.how_to_reg_rounded, size: 18),
+                          icon: const Icon(Icons.how_to_reg_rounded, size: 20, color: AppColors.primary),
                           label: Text(
                             'Mark Register',
-                            style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13),
+                            style: GoogleFonts.outfit(
+                              fontWeight: FontWeight.w900,
+                              fontSize: 14,
+                              color: AppColors.textPrimary,
+                            ),
                           ),
                         ),
                       ],

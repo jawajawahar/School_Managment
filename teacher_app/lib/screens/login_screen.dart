@@ -39,6 +39,7 @@ class _LoginScreenState extends State<LoginScreen> {
       final assignedClass = auth.currentUser?.assignedClassId;
       await attProvider.loadClasses(preferredClassId: assignedClass);
 
+      if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const MainNavigationScreen()),
       );
@@ -59,11 +60,7 @@ class _LoginScreenState extends State<LoginScreen> {
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFF0F5132), Color(0xFF0F172A)],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
+          gradient: AppColors.primaryGradient,
         ),
         child: SafeArea(
           child: Stack(
@@ -89,7 +86,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     width: 90,
                     height: 90,
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.15),
+                      color: Colors.white.withValues(alpha: 0.15),
                       shape: BoxShape.circle,
                       border: Border.all(color: Colors.white30, width: 2),
                     ),
