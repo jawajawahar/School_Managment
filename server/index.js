@@ -186,9 +186,33 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(401).json({ error: 'Incorrect password for this account. Access denied.' });
     }
 
+    let assignedClassId = null;
+    let assignedGrade = null;
+    let assignedSection = null;
+    let teacherId = null;
+
+    if (user.role === 'teacher') {
+      const classRes = await query(
+        `SELECT c.id, c.grade, c.section, t.id AS teacher_id
+         FROM classes c
+         LEFT JOIN teachers t ON c.class_teacher_id = t.id OR c.class_teacher_id = t.user_id
+         LEFT JOIN users u ON t.user_id = u.id
+         WHERE c.class_teacher_id = $1 OR t.user_id = $1 OR LOWER(u.email) = LOWER($2)
+         LIMIT 1`,
+        [user.id, cleanEmail]
+      );
+      if (classRes.rows.length > 0) {
+        assignedClassId = classRes.rows[0].id;
+        assignedGrade = classRes.rows[0].grade;
+        assignedSection = classRes.rows[0].section;
+        teacherId = classRes.rows[0].teacher_id;
+      }
+    }
+
     res.json({
       user: {
         id: user.id,
+        teacherId: teacherId || user.id,
         schoolId: user.school_id,
         email: user.email,
         fullName: user.full_name,
@@ -196,6 +220,9 @@ app.post('/api/auth/login', async (req, res) => {
         isActive: user.is_active,
         phone: user.phone,
         password: user.password_hash,
+        assignedClassId,
+        assignedGrade,
+        assignedSection,
       },
       token: `jwt_token_${user.id}_${Date.now()}`,
     });

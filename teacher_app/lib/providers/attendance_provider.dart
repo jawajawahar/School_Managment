@@ -39,17 +39,21 @@ class AttendanceProvider extends ChangeNotifier {
     loadClasses();
   }
 
-  Future<void> loadClasses() async {
+  Future<void> loadClasses({String? preferredClassId}) async {
     _isLoadingClasses = true;
     notifyListeners();
 
     _classes = await _apiService.fetchClasses();
-    if (_classes.isNotEmpty && _selectedClassId == null) {
-      final grade9Class = _classes.firstWhere(
-        (c) => c['id'] == 'class-9a' || c['grade'].toString().toLowerCase().contains('9'),
-        orElse: () => _classes.first,
-      );
-      _selectedClassId = grade9Class['id'];
+    if (_classes.isNotEmpty) {
+      if (preferredClassId != null && _classes.any((c) => c['id'] == preferredClassId)) {
+        _selectedClassId = preferredClassId;
+      } else if (_selectedClassId == null) {
+        final defaultClass = _classes.firstWhere(
+          (c) => c['grade'].toString().toLowerCase().contains('10') || c['id'] == 'class-10a',
+          orElse: () => _classes.first,
+        );
+        _selectedClassId = defaultClass['id'];
+      }
       await loadStudentsForClass(_selectedClassId!);
     }
     _isLoadingClasses = false;
@@ -65,13 +69,16 @@ class AttendanceProvider extends ChangeNotifier {
   void setDate(DateTime date) {
     _selectedDate = DateFormat('yyyy-MM-dd').format(date);
     notifyListeners();
+    if (_selectedClassId != null) {
+      loadStudentsForClass(_selectedClassId!);
+    }
   }
 
   Future<void> loadStudentsForClass(String classId) async {
     _isLoadingStudents = true;
     notifyListeners();
 
-    _students = await _apiService.fetchStudents(classId);
+    _students = await _apiService.fetchStudents(classId, date: _selectedDate);
     _isLoadingStudents = false;
     notifyListeners();
   }

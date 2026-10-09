@@ -23,6 +23,9 @@ class AuthProvider extends ChangeNotifier {
     final email = prefs.getString('teacher_email');
     final name = prefs.getString('teacher_name');
     final id = prefs.getString('teacher_id');
+    final assignedClassId = prefs.getString('assigned_class_id');
+    final assignedGrade = prefs.getString('assigned_grade');
+    final assignedSection = prefs.getString('assigned_section');
 
     if (email != null && name != null) {
       _currentUser = UserModel(
@@ -30,6 +33,9 @@ class AuthProvider extends ChangeNotifier {
         email: email,
         fullName: name,
         role: 'teacher',
+        assignedClassId: assignedClassId,
+        assignedGrade: assignedGrade,
+        assignedSection: assignedSection,
       );
       notifyListeners();
     }
@@ -48,6 +54,15 @@ class AuthProvider extends ChangeNotifier {
       await prefs.setString('teacher_email', user.email);
       await prefs.setString('teacher_name', user.fullName);
       await prefs.setString('teacher_id', user.id);
+      if (user.assignedClassId != null) {
+        await prefs.setString('assigned_class_id', user.assignedClassId!);
+      }
+      if (user.assignedGrade != null) {
+        await prefs.setString('assigned_grade', user.assignedGrade!);
+      }
+      if (user.assignedSection != null) {
+        await prefs.setString('assigned_section', user.assignedSection!);
+      }
 
       _isLoading = false;
       notifyListeners();

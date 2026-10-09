@@ -23,8 +23,9 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final teacherName = Provider.of<AuthProvider>(context, listen: false).currentUser?.fullName ?? '';
-      Provider.of<AttendanceProvider>(context, listen: false).loadClasses();
+      final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
+      final teacherName = user?.fullName ?? '';
+      Provider.of<AttendanceProvider>(context, listen: false).loadClasses(preferredClassId: user?.assignedClassId);
       Provider.of<LeaveProvider>(context, listen: false).fetchLeaveRequests(teacherName);
       Provider.of<NotificationProvider>(context, listen: false).fetchAnnouncements();
     });
@@ -35,6 +36,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     final user = Provider.of<AuthProvider>(context).currentUser;
     final attProvider = Provider.of<AttendanceProvider>(context);
     final notifProvider = Provider.of<NotificationProvider>(context);
+
+    final classBadgeLabel = user?.assignedGrade != null
+        ? 'CLASS TEACHER • ${user!.assignedGrade!.toUpperCase()} ${user.assignedSection ?? ''}'
+        : 'CLASS TEACHER • GRADE 10-A';
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -108,7 +113,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Text(
-                            'CLASS TEACHER • GRADE 10-A',
+                            classBadgeLabel,
                             style: GoogleFonts.inter(
                               color: Colors.white,
                               fontSize: 11,

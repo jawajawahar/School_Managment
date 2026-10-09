@@ -6,6 +6,9 @@ class UserModel {
   final String? phone;
   final String? schoolId;
   final String? token;
+  final String? assignedClassId;
+  final String? assignedGrade;
+  final String? assignedSection;
 
   UserModel({
     required this.id,
@@ -15,7 +18,19 @@ class UserModel {
     this.phone,
     this.schoolId,
     this.token,
+    this.assignedClassId,
+    this.assignedGrade,
+    this.assignedSection,
   });
+
+  String get assignedClassName {
+    if (assignedGrade != null && assignedSection != null) {
+      return '$assignedGrade ($assignedSection)';
+    } else if (assignedGrade != null) {
+      return assignedGrade!;
+    }
+    return 'Grade 9-A';
+  }
 
   factory UserModel.fromJson(Map<String, dynamic> json, {String? token}) {
     return UserModel(
@@ -26,6 +41,9 @@ class UserModel {
       phone: json['phone'],
       schoolId: json['schoolId'] ?? json['school_id'],
       token: token,
+      assignedClassId: json['assignedClassId'],
+      assignedGrade: json['assignedGrade'],
+      assignedSection: json['assignedSection'],
     );
   }
 
@@ -37,6 +55,9 @@ class UserModel {
       'role': role,
       'phone': phone,
       'schoolId': schoolId,
+      'assignedClassId': assignedClassId,
+      'assignedGrade': assignedGrade,
+      'assignedSection': assignedSection,
     };
   }
 }

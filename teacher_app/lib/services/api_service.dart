@@ -67,8 +67,8 @@ class ApiService {
     ];
   }
 
-  // 3. Fetch Students for Class
-  Future<List<StudentModel>> fetchStudents(String classId) async {
+  // 3. Fetch Students for Class (with optional date attendance status)
+  Future<List<StudentModel>> fetchStudents(String classId, {String? date}) async {
     final endpoint = classId.isNotEmpty
         ? '${ApiConstants.baseUrl}${ApiConstants.studentsEndpoint}?classId=$classId'
         : '${ApiConstants.baseUrl}${ApiConstants.studentsEndpoint}';
@@ -78,7 +78,36 @@ class ApiService {
       if (response.statusCode == 200) {
         final List list = jsonDecode(response.body);
         if (list.isNotEmpty) {
-          return list.map((s) => StudentModel.fromJson(s)).toList();
+          final students = list.map((s) => StudentModel.fromJson(s)).toList();
+
+          // Fetch existing attendance for date if provided
+          if (date != null && date.isNotEmpty) {
+            try {
+              final attUrl = Uri.parse('${ApiConstants.baseUrl}${ApiConstants.attendanceEndpoint}?date=$date&classId=$classId');
+              final attRes = await client.get(attUrl, headers: headers);
+              if (attRes.statusCode == 200) {
+                final List attList = jsonDecode(attRes.body);
+                final Map<String, String> attMap = {};
+                for (var item in attList) {
+                  final sId = item['studentId'] ?? item['studentNo'];
+                  if (sId != null && item['status'] != null) {
+                    attMap[sId.toString()] = item['status'].toString();
+                  }
+                }
+                for (var student in students) {
+                  if (attMap.containsKey(student.id)) {
+                    student.attendanceStatus = attMap[student.id]!;
+                  } else if (attMap.containsKey(student.studentNo)) {
+                    student.attendanceStatus = attMap[student.studentNo]!;
+                  }
+                }
+              }
+            } catch (e) {
+              print('Attendance fetch error: $e');
+            }
+          }
+
+          return students;
         }
       }
     } catch (e) {

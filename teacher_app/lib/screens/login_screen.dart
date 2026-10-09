@@ -14,8 +14,8 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _emailController = TextEditingController(text: 'sarah.teacher@gsms.gov.lk');
-  final _passwordController = TextEditingController(text: 'password123');
+  final _emailController = TextEditingController(text: 'jawajawaharsha@gmail.com');
+  final _passwordController = TextEditingController(text: 'Jawa15155-A');
   bool _obscurePassword = true;
 
   void _handleLogin() async {
@@ -33,6 +33,11 @@ class _LoginScreenState extends State<LoginScreen> {
     final success = await auth.login(email, password);
 
     if (success && mounted) {
+      // Sync teacher assigned class to attendance provider
+      final attProvider = Provider.of<AttendanceProvider>(context, listen: false);
+      final assignedClass = auth.currentUser?.assignedClassId;
+      await attProvider.loadClasses(preferredClassId: assignedClass);
+
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const MainNavigationScreen()),
       );
