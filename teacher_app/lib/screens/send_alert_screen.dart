@@ -44,7 +44,7 @@ class _SendAlertScreenState extends State<SendAlertScreen> {
     final ok = await notifProvider.sendAlertToPrincipal(
       title: '[$_category] $title',
       message: message,
-      teacherName: user?.fullName ?? 'Mrs. Sarah Perera',
+      teacherName: user?.fullName ?? 'Teacher',
     );
 
     if (ok && mounted) {

@@ -107,7 +107,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                         ),
                       ),
                       Text(
-                        user?.fullName ?? 'Mrs. Sarah Perera',
+                        user?.fullName ?? 'Teacher',
                         style: GoogleFonts.outfit(
                           color: AppColors.textPrimary,
                           fontSize: 22,

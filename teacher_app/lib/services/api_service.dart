@@ -35,17 +35,6 @@ class ApiService {
         throw Exception(err['error'] ?? 'Login failed. Please check your credentials.');
       }
     } catch (e) {
-      // Fallback for demo / offline mode if server is not reachable
-      if (email.toLowerCase().contains('teacher') || email.toLowerCase().contains('sarah') || email.contains('@')) {
-        return UserModel(
-          id: 'tch-demo-01',
-          email: email,
-          fullName: 'Mrs. Sarah Perera',
-          role: 'teacher',
-          phone: '+94 77 123 4567',
-          token: 'demo_jwt_token_123',
-        );
-      }
       rethrow;
     }
   }
@@ -160,7 +149,7 @@ class ApiService {
     return [
       LeaveModel(
         id: 'lvr-01',
-        applicantName: teacherName.isEmpty ? 'Mrs. Sarah Perera' : teacherName,
+        applicantName: teacherName.isEmpty ? 'Teacher' : teacherName,
         role: 'teacher',
         type: 'Sick Leave',
         startDate: '2026-10-12',
@@ -170,7 +159,7 @@ class ApiService {
       ),
       LeaveModel(
         id: 'lvr-02',
-        applicantName: teacherName.isEmpty ? 'Mrs. Sarah Perera' : teacherName,
+        applicantName: teacherName.isEmpty ? 'Teacher' : teacherName,
         role: 'teacher',
         type: 'Casual Leave',
         startDate: '2026-09-15',

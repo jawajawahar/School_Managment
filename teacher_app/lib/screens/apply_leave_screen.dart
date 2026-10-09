@@ -63,7 +63,7 @@ class _ApplyLeaveScreenState extends State<ApplyLeaveScreen> {
     final leaveProvider = Provider.of<LeaveProvider>(context, listen: false);
 
     final ok = await leaveProvider.applyLeave(
-      teacherName: user?.fullName ?? 'Mrs. Sarah Perera',
+      teacherName: user?.fullName ?? 'Teacher',
       type: _leaveType,
       startDate: DateFormat('yyyy-MM-dd').format(_startDate),
       endDate: DateFormat('yyyy-MM-dd').format(_endDate),
