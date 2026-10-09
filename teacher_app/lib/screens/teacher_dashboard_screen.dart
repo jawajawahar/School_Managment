@@ -61,6 +61,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       ),
     );
   }
+
   @override
   void initState() {
     super.initState();
@@ -77,56 +78,64 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   Widget build(BuildContext context) {
     final user = Provider.of<AuthProvider>(context).currentUser;
     final attProvider = Provider.of<AttendanceProvider>(context);
+    final leaveProvider = Provider.of<LeaveProvider>(context);
     final notifProvider = Provider.of<NotificationProvider>(context);
 
     final classBadgeLabel = user?.assignedGrade != null
         ? 'CLASS TEACHER • ${user!.assignedGrade!.toUpperCase()} ${user.assignedSection ?? ''}'
-        : 'CLASS TEACHER • GRADE 10-A';
+        : 'CLASS TEACHER • GRADE 10 (A)';
+
+    final initial = user?.fullName.isNotEmpty == true ? user!.fullName[0].toUpperCase() : 'T';
 
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
         child: SingleChildScrollView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           padding: const EdgeInsets.all(20.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header profile card
+              // Header Profile Card
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Welcome Back, 👋',
-                        style: GoogleFonts.inter(
-                          color: AppColors.textSecondary,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Welcome Back, 👋',
+                          style: GoogleFonts.inter(
+                            color: AppColors.textSecondary,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
-                      ),
-                      Text(
-                        user?.fullName ?? 'Teacher',
-                        style: GoogleFonts.outfit(
-                          color: AppColors.textPrimary,
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
+                        const SizedBox(height: 2),
+                        Text(
+                          user?.fullName ?? 'Teacher',
+                          style: GoogleFonts.outfit(
+                            color: AppColors.textPrimary,
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                   Row(
                     children: [
                       CircleAvatar(
-                        radius: 22,
+                        radius: 20,
                         backgroundColor: AppColors.primary,
                         child: Text(
-                          user?.fullName.isNotEmpty == true ? user!.fullName[0].toUpperCase() : 'T',
+                          initial,
                           style: GoogleFonts.outfit(
                             color: Colors.white,
                             fontWeight: FontWeight.bold,
-                            fontSize: 18,
+                            fontSize: 17,
                           ),
                         ),
                       ),
@@ -135,7 +144,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                         icon: Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: AppColors.primary.withValues(alpha: 0.12),
+                            color: AppColors.primary.withValues(alpha: 0.1),
                             shape: BoxShape.circle,
                           ),
                           child: const Icon(
@@ -152,7 +161,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                         icon: Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: AppColors.absentRed.withValues(alpha: 0.12),
+                            color: AppColors.absentRed.withValues(alpha: 0.1),
                             shape: BoxShape.circle,
                           ),
                           child: const Icon(
@@ -171,7 +180,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
 
               const SizedBox(height: 20),
 
-              // Telemetry Summary Card
+              // Main Class Overview Card
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(20),
@@ -187,7 +196,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                           decoration: BoxDecoration(
                             color: Colors.white24,
                             borderRadius: BorderRadius.circular(12),
@@ -202,29 +211,46 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                             ),
                           ),
                         ),
-                        const Icon(Icons.verified, color: Colors.amberAccent, size: 20),
+                        const Icon(Icons.verified_rounded, color: Colors.amberAccent, size: 20),
                       ],
                     ),
                     const SizedBox(height: 16),
-                    Text(
-                      'Today\'s Class Attendance',
-                      style: GoogleFonts.inter(color: Colors.white70, fontSize: 13),
-                    ),
-                    const SizedBox(height: 4),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        Text(
-                          '${attProvider.attendancePercentage.toStringAsFixed(0)}%',
-                          style: GoogleFonts.outfit(
-                            color: Colors.white,
-                            fontSize: 36,
-                            fontWeight: FontWeight.bold,
-                          ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Overall Attendance Rate',
+                              style: GoogleFonts.inter(color: Colors.white70, fontSize: 13),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '${attProvider.attendancePercentage.toStringAsFixed(0)}%',
+                              style: GoogleFonts.outfit(
+                                color: Colors.white,
+                                fontSize: 38,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
                         ),
-                        Text(
-                          '${attProvider.presentCount} Present / ${attProvider.totalStudents} Total',
-                          style: GoogleFonts.inter(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                        ElevatedButton.icon(
+                          onPressed: () => widget.onNavigate?.call(1),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            foregroundColor: AppColors.primary,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          icon: const Icon(Icons.how_to_reg_rounded, size: 18),
+                          label: Text(
+                            'Mark Register',
+                            style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
                         ),
                       ],
                     ),
@@ -234,65 +260,130 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
 
               const SizedBox(height: 24),
 
-              // Action Buttons Title
-              Text(
-                'Quick Teacher Actions',
-                style: GoogleFonts.outfit(
-                  color: AppColors.textPrimary,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
+              // Live Attendance Telemetry Cards (Replacing old Quick Actions)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Live Attendance Telemetry',
+                    style: GoogleFonts.outfit(
+                      color: AppColors.textPrimary,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Text(
+                    '${attProvider.totalStudents} Enrolled',
+                    style: GoogleFonts.inter(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
 
-              // Grid of 4 Actions
+              // 2x2 Telemetry Cards Grid (Present, Absent, Late, On Leave)
               GridView.count(
                 crossAxisCount: 2,
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                crossAxisSpacing: 14,
-                mainAxisSpacing: 14,
-                childAspectRatio: 1.3,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                childAspectRatio: 1.45,
                 children: [
-                  _buildActionTile(
-                    title: 'Mark Attendance',
-                    subtitle: 'Daily register',
-                    icon: Icons.how_to_reg_rounded,
-                    color: AppColors.primary,
+                  // 1. Present Card
+                  _buildTelemetryCard(
+                    title: 'Present Today',
+                    count: '${attProvider.presentCount}',
+                    subtitle: 'In classroom',
+                    icon: Icons.check_circle_rounded,
+                    color: AppColors.presentGreen,
+                    badgeText: attProvider.totalStudents > 0
+                        ? '${((attProvider.presentCount / attProvider.totalStudents) * 100).toStringAsFixed(0)}%'
+                        : '0%',
                     onTap: () => widget.onNavigate?.call(1),
                   ),
-                  _buildActionTile(
-                    title: 'Apply for Leave',
-                    subtitle: 'Submit to Principal',
+                  // 2. Absent Card
+                  _buildTelemetryCard(
+                    title: 'Absent Today',
+                    count: '${attProvider.absentCount}',
+                    subtitle: 'Unexcused',
+                    icon: Icons.cancel_rounded,
+                    color: AppColors.absentRed,
+                    badgeText: attProvider.totalStudents > 0
+                        ? '${((attProvider.absentCount / attProvider.totalStudents) * 100).toStringAsFixed(0)}%'
+                        : '0%',
+                    onTap: () => widget.onNavigate?.call(1),
+                  ),
+                  // 3. Late Card
+                  _buildTelemetryCard(
+                    title: 'Late Arrivals',
+                    count: '${attProvider.lateCount}',
+                    subtitle: 'Marked late entry',
+                    icon: Icons.access_time_filled_rounded,
+                    color: AppColors.lateOrange,
+                    badgeText: attProvider.totalStudents > 0
+                        ? '${((attProvider.lateCount / attProvider.totalStudents) * 100).toStringAsFixed(0)}%'
+                        : '0%',
+                    onTap: () => widget.onNavigate?.call(1),
+                  ),
+                  // 4. Leave Card
+                  _buildTelemetryCard(
+                    title: 'On Leave',
+                    count: '${leaveProvider.leaveRequests.where((l) => l.status == 'approved').length}',
+                    subtitle: 'Approved leave',
                     icon: Icons.event_available_rounded,
-                    color: AppColors.accentAmber,
-                    onTap: () => widget.onNavigate?.call(2),
-                  ),
-                  _buildActionTile(
-                    title: 'Principal Alerts',
-                    subtitle: 'Send emergency msg',
-                    icon: Icons.add_alert_rounded,
                     color: AppColors.accentTeal,
-                    onTap: () => widget.onNavigate?.call(3),
-                  ),
-                  _buildActionTile(
-                    title: 'Timetable',
-                    subtitle: 'Period schedule',
-                    icon: Icons.calendar_month_rounded,
-                    color: AppColors.excusedBlue,
-                    onTap: () => widget.onNavigate?.call(4),
+                    badgeText: '${leaveProvider.leaveRequests.length} Total',
+                    onTap: () => widget.onNavigate?.call(2),
                   ),
                 ],
               ).animate().fade(delay: 200.ms),
 
               const SizedBox(height: 24),
 
-              // Announcements Header
+              // Navigation Shortcuts Row
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildShortcutButton(
+                      label: 'Mark Register',
+                      icon: Icons.how_to_reg_rounded,
+                      color: AppColors.primary,
+                      onTap: () => widget.onNavigate?.call(1),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _buildShortcutButton(
+                      label: 'Apply Leave',
+                      icon: Icons.event_note_rounded,
+                      color: AppColors.accentAmber,
+                      onTap: () => widget.onNavigate?.call(2),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _buildShortcutButton(
+                      label: 'Notify Office',
+                      icon: Icons.add_alert_rounded,
+                      color: AppColors.accentTeal,
+                      onTap: () => widget.onNavigate?.call(3),
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 24),
+
+              // School Announcements Header
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Principal & School Announcements',
+                    'Principal Announcements',
                     style: GoogleFonts.outfit(
                       color: AppColors.textPrimary,
                       fontSize: 18,
@@ -303,23 +394,22 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                     onPressed: () => widget.onNavigate?.call(3),
                     child: Text(
                       'View All',
-                      style: GoogleFonts.inter(color: AppColors.primary, fontWeight: FontWeight.bold),
+                      style: GoogleFonts.inter(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 13),
                     ),
                   ),
                 ],
               ),
+              const SizedBox(height: 8),
 
-              const SizedBox(height: 10),
-
-              // Announcements List
+              // Announcements Feed
               if (notifProvider.isLoading)
                 const Center(child: Padding(padding: EdgeInsets.all(20.0), child: CircularProgressIndicator()))
               else if (notifProvider.announcements.isEmpty)
                 GlassCard(
                   child: Center(
                     child: Text(
-                      'No announcements posted today.',
-                      style: GoogleFonts.inter(color: AppColors.textMuted),
+                      'No official announcements posted today.',
+                      style: GoogleFonts.inter(color: AppColors.textMuted, fontSize: 13),
                     ),
                   ),
                 )
@@ -327,24 +417,26 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                 ...notifProvider.announcements.take(3).map(
                       (item) => GlassCard(
                         onTap: () => widget.onNavigate?.call(3),
+                        margin: const EdgeInsets.only(bottom: 10),
+                        padding: const EdgeInsets.all(14),
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Container(
-                              padding: const EdgeInsets.all(10),
+                              padding: const EdgeInsets.all(8),
                               decoration: BoxDecoration(
                                 color: item.isEmergency
-                                    ? AppColors.absentRed.withOpacity(0.1)
-                                    : AppColors.primary.withOpacity(0.1),
+                                    ? AppColors.absentRed.withValues(alpha: 0.1)
+                                    : AppColors.primary.withValues(alpha: 0.1),
                                 shape: BoxShape.circle,
                               ),
                               child: Icon(
                                 item.isEmergency ? Icons.warning_amber_rounded : Icons.campaign_rounded,
                                 color: item.isEmergency ? AppColors.absentRed : AppColors.primary,
-                                size: 22,
+                                size: 20,
                               ),
                             ),
-                            const SizedBox(width: 14),
+                            const SizedBox(width: 12),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -381,55 +473,122 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     );
   }
 
-  Widget _buildActionTile({
+  Widget _buildTelemetryCard({
     required String title,
+    required String count,
     required String subtitle,
     required IconData icon,
     required Color color,
+    required String badgeText,
     required VoidCallback onTap,
   }) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.black.withOpacity(0.05)),
+          border: Border.all(color: color.withValues(alpha: 0.2), width: 1.5),
           boxShadow: AppColors.softShadow,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(icon, color: color, size: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(icon, color: color, size: 20),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    badgeText,
+                    style: GoogleFonts.inter(
+                      color: color,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
             ),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  title,
+                  count,
                   style: GoogleFonts.outfit(
                     color: AppColors.textPrimary,
-                    fontSize: 14,
+                    fontSize: 24,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                Text(
-                  subtitle,
-                  style: GoogleFonts.inter(
-                    color: AppColors.textMuted,
-                    fontSize: 11,
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      title,
+                      style: GoogleFonts.inter(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Icon(Icons.arrow_forward_ios_rounded, size: 10, color: AppColors.textMuted),
+                  ],
                 ),
               ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildShortcutButton({
+    required String label,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: 0.2)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 16, color: color),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                label,
+                style: GoogleFonts.outfit(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: color,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
