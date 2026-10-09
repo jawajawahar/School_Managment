@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../constants/app_colors.dart';
 import '../providers/auth_provider.dart';
+import '../providers/attendance_provider.dart';
 import 'main_navigation_screen.dart';
 
 class LoginScreen extends StatefulWidget {
