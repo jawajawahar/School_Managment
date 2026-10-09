@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/student_model.dart';
+import '../models/user_model.dart';
 import '../services/api_service.dart';
 
 class AttendanceProvider extends ChangeNotifier {
@@ -35,30 +36,107 @@ class AttendanceProvider extends ChangeNotifier {
   double get attendancePercentage =>
       totalStudents > 0 ? ((presentCount + lateCount) / totalStudents) * 100 : 0.0;
 
+  String get selectedClassName {
+    if (_selectedClassId == null || _classes.isEmpty) return 'Class Register';
+    final found = _classes.firstWhere(
+      (c) => c['id'] == _selectedClassId,
+      orElse: () => _classes.first,
+    );
+    final grade = found['grade'] ?? '';
+    final section = found['section'] ?? '';
+    if (grade.toString().isNotEmpty && section.toString().isNotEmpty) {
+      return '$grade ($section)';
+    } else if (grade.toString().isNotEmpty) {
+      return '$grade';
+    }
+    return found['name'] ?? _selectedClassId!;
+  }
+
   AttendanceProvider() {
     loadClasses();
   }
 
-  Future<void> loadClasses({String? preferredClassId}) async {
+  /// Get allowed classes for a user.
+  /// Standard class teachers are strictly limited to their assigned class.
+  /// Admin/Principal roles can access all school classes.
+  List<Map<String, dynamic>> getClassesForUser(UserModel? user) {
+    if (user == null) return _classes;
+    final isTeacher = user.role != 'admin' && user.role != 'principal' && user.role != 'admin_staff';
+    final targetClassId = user.assignedClassId;
+
+    if (isTeacher && targetClassId != null && targetClassId.isNotEmpty) {
+      final matching = _classes.where((c) {
+        final cId = c['id'].toString();
+        return cId == targetClassId || cId.toLowerCase() == targetClassId.toLowerCase();
+      }).toList();
+
+      if (matching.isNotEmpty) return matching;
+
+      return [
+        {
+          'id': targetClassId,
+          'grade': user.assignedGrade ?? 'Assigned',
+          'section': user.assignedSection ?? 'Class',
+        }
+      ];
+    }
+    return _classes;
+  }
+
+  Future<void> loadClasses({String? preferredClassId, String? userRole, UserModel? user}) async {
     _isLoadingClasses = true;
     notifyListeners();
 
-    _classes = await _apiService.fetchClasses();
-    if (_classes.isNotEmpty) {
-      if (preferredClassId != null && _classes.any((c) => c['id'] == preferredClassId)) {
-        _selectedClassId = preferredClassId;
-      } else if (_selectedClassId == null) {
-        final defaultClass = _classes.firstWhere(
-          (c) => c['grade'].toString().toLowerCase().contains('10') || c['id'] == 'class-10a',
-          orElse: () => _classes.first,
-        );
-        _selectedClassId = defaultClass['id'];
+    final allFetchedClasses = await _apiService.fetchClasses();
+    final isTeacher = userRole != 'admin' && userRole != 'principal' && userRole != 'admin_staff';
+    final targetClassId = preferredClassId ?? user?.assignedClassId;
+
+    if (allFetchedClasses.isNotEmpty) {
+      if (isTeacher && targetClassId != null && targetClassId.isNotEmpty) {
+        final matching = allFetchedClasses.where((c) {
+          final cId = c['id'].toString();
+          return cId == targetClassId || cId.toLowerCase() == targetClassId.toLowerCase();
+        }).toList();
+
+        if (matching.isNotEmpty) {
+          _classes = matching;
+        } else {
+          _classes = [
+            {
+              'id': targetClassId,
+              'grade': user?.assignedGrade ?? 'Assigned',
+              'section': user?.assignedSection ?? 'Class',
+            }
+          ];
+        }
+        _selectedClassId = targetClassId;
+      } else {
+        _classes = allFetchedClasses;
+        if (targetClassId != null && _classes.any((c) => c['id'] == targetClassId)) {
+          _selectedClassId = targetClassId;
+        } else if (_selectedClassId == null || !_classes.any((c) => c['id'] == _selectedClassId)) {
+          _selectedClassId = _classes.first['id'];
+        }
       }
+    } else if (targetClassId != null && targetClassId.isNotEmpty) {
+      _classes = [
+        {
+          'id': targetClassId,
+          'grade': user?.assignedGrade ?? 'Grade 10',
+          'section': user?.assignedSection ?? 'A',
+        }
+      ];
+      _selectedClassId = targetClassId;
+    }
+
+    if (_selectedClassId != null) {
       await loadStudentsForClass(_selectedClassId!);
     }
     _isLoadingClasses = false;
     notifyListeners();
   }
+
+
 
   Future<void> setClassId(String classId) async {
     _selectedClassId = classId;

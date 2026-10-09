@@ -37,7 +37,7 @@ class _LoginScreenState extends State<LoginScreen> {
     if (success && mounted) {
       final attProvider = Provider.of<AttendanceProvider>(context, listen: false);
       final assignedClass = auth.currentUser?.assignedClassId;
-      await attProvider.loadClasses(preferredClassId: assignedClass);
+      await attProvider.loadClasses(preferredClassId: assignedClass, userRole: auth.currentUser?.role, user: auth.currentUser);
 
       if (!mounted) return;
       Navigator.of(context).pushReplacement(

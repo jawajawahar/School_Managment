@@ -69,7 +69,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
       final teacherName = user?.fullName ?? '';
-      Provider.of<AttendanceProvider>(context, listen: false).loadClasses(preferredClassId: user?.assignedClassId);
+      Provider.of<AttendanceProvider>(context, listen: false).loadClasses(preferredClassId: user?.assignedClassId, userRole: user?.role, user: user);
       Provider.of<LeaveProvider>(context, listen: false).fetchLeaveRequests(teacherName);
       Provider.of<NotificationProvider>(context, listen: false).fetchAnnouncements();
       Provider.of<NotificationProvider>(context, listen: false).fetchTeacherNotifications(

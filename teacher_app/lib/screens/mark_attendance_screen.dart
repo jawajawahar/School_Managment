@@ -36,7 +36,7 @@ class MarkAttendanceScreen extends StatelessWidget {
             icon: const Icon(Icons.refresh_rounded, color: AppColors.primary),
             tooltip: 'Refresh Classes & Students',
             onPressed: () {
-              attProvider.loadClasses(preferredClassId: user?.assignedClassId);
+              attProvider.loadClasses(preferredClassId: user?.assignedClassId, userRole: user?.role, user: user);
             },
           ),
         ],
@@ -52,35 +52,88 @@ class MarkAttendanceScreen extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      // Class Dropdown
+                      // Class Selector (Dropdown for Admin/Principal, Locked Badge for Class Teacher)
                       Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14),
-                          decoration: BoxDecoration(
-                            color: AppColors.background,
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: AppColors.primary.withValues(alpha: 0.15)),
-                          ),
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<String>(
-                              value: attProvider.selectedClassId,
-                              isExpanded: true,
-                              hint: Text('Select Class', style: GoogleFonts.outfit(fontWeight: FontWeight.w600)),
-                              items: attProvider.classes.map((c) {
-                                return DropdownMenuItem<String>(
-                                  value: c['id'],
-                                  child: Text(
-                                    '${c['grade']} (${c['section']})',
-                                    style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 15, color: AppColors.textPrimary),
+                        child: () {
+                          final userClasses = attProvider.getClassesForUser(user);
+                          if (userClasses.length > 1) {
+                            return Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 14),
+                              decoration: BoxDecoration(
+                                color: AppColors.background,
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(color: AppColors.primary.withValues(alpha: 0.15)),
+                              ),
+                              child: DropdownButtonHideUnderline(
+                                child: DropdownButton<String>(
+                                  value: attProvider.selectedClassId,
+                                  isExpanded: true,
+                                  hint: Text('Select Class', style: GoogleFonts.outfit(fontWeight: FontWeight.w600)),
+                                  items: userClasses.map((c) {
+                                    return DropdownMenuItem<String>(
+                                      value: c['id'],
+                                      child: Text(
+                                        '${c['grade']} (${c['section']})',
+                                        style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 15, color: AppColors.textPrimary),
+                                      ),
+                                    );
+                                  }).toList(),
+                                  onChanged: (val) {
+                                    if (val != null) attProvider.setClassId(val);
+                                  },
+                                ),
+                              ),
+                            );
+                          } else {
+                            return Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                              decoration: BoxDecoration(
+                                color: AppColors.background,
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.school_rounded, color: AppColors.primary, size: 18),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      attProvider.selectedClassName,
+                                      style: GoogleFonts.outfit(
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 15,
+                                        color: AppColors.textPrimary,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                                   ),
-                                );
-                              }).toList(),
-                              onChanged: (val) {
-                                if (val != null) attProvider.setClassId(val);
-                              },
-                            ),
-                          ),
-                        ),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.primary.withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(Icons.lock_rounded, size: 11, color: AppColors.primary),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          'Assigned Class',
+                                          style: GoogleFonts.inter(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                            color: AppColors.primary,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }
+                        }(),
                       ),
                       const SizedBox(width: 12),
                       // Date Selector
