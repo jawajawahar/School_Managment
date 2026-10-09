@@ -1,10 +1,31 @@
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiConstants {
-  // Dynamic Host Detection:
-  // Android Emulator uses 10.0.2.2 to access host machine localhost:5000
-  // iOS / Windows Desktop / Web uses localhost or network IP
+  static String? _customHost;
+
+  static Future<void> loadCustomHost() async {
+    final prefs = await SharedPreferences.getInstance();
+    _customHost = prefs.getString('custom_server_ip');
+  }
+
+  static Future<void> setCustomHost(String ipOrUrl) async {
+    final prefs = await SharedPreferences.getInstance();
+    var clean = ipOrUrl.trim();
+    if (clean.isNotEmpty && !clean.startsWith('http://') && !clean.startsWith('https://')) {
+      clean = 'http://$clean';
+    }
+    if (clean.isNotEmpty && !clean.endsWith('/api')) {
+      clean = '$clean/api';
+    }
+    _customHost = clean;
+    await prefs.setString('custom_server_ip', clean);
+  }
+
   static String get baseUrl {
+    if (_customHost != null && _customHost!.isNotEmpty) {
+      return _customHost!;
+    }
     if (defaultTargetPlatform == TargetPlatform.android) {
       return 'http://10.0.2.2:5000/api';
     }

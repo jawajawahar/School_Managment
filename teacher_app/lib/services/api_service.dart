@@ -58,13 +58,10 @@ class ApiService {
         final List list = jsonDecode(response.body);
         return list.cast<Map<String, dynamic>>();
       }
-    } catch (_) {}
-    // Fallback Mock Classes
-    return [
-      {'id': 'class-9a', 'grade': 'Grade 9', 'section': 'A', 'capacity': 35},
-      {'id': 'class-10a', 'grade': 'Grade 10', 'section': 'A', 'capacity': 38},
-      {'id': 'class-11b', 'grade': 'Grade 11', 'section': 'B', 'capacity': 32},
-    ];
+    } catch (e) {
+      debugPrint('API Error fetching classes: $e');
+    }
+    return [];
   }
 
   // 3. Fetch Students for Class (with optional date attendance status)
@@ -111,17 +108,11 @@ class ApiService {
         }
       }
     } catch (e) {
-      print('API Error fetching students: $e');
+      debugPrint('API Error fetching students: $e');
     }
 
-    // Fallback Mock Students only if server unreachable
-    return [
-      StudentModel(id: 'stu-9a-1', studentNo: 'GSMS-2026-0301', firstName: 'Kasun', lastName: 'Kalhara', classId: classId),
-      StudentModel(id: 'stu-9a-2', studentNo: 'GSMS-2026-0302', firstName: 'Nipuni', lastName: 'Tharushika', classId: classId),
-      StudentModel(id: 'stu-9a-3', studentNo: 'GSMS-2026-0303', firstName: 'Dineth', lastName: 'Prabhashitha', classId: classId),
-      StudentModel(id: 'stu-9a-4', studentNo: 'GSMS-2026-0304', firstName: 'Kavindi', lastName: 'Senanayake', classId: classId),
-      StudentModel(id: 'stu-9a-5', studentNo: 'GSMS-2026-0305', firstName: 'Chamath', lastName: 'Bandara', classId: classId),
-    ];
+    // Return empty list if server is unreachable or no students found in PostgreSQL
+    return [];
   }
 
   // 4. Batch Submit Daily Attendance Register
