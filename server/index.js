@@ -1075,6 +1075,94 @@ app.delete('/api/announcements/:id', async (req, res) => {
 });
 
 // ==========================================
+// 9B. NOTIFICATIONS API (TARGETED TEACHER NOTIFICATIONS)
+// ==========================================
+app.get('/api/notifications', async (req, res) => {
+  const { userId, teacherId, classId } = req.query;
+  try {
+    let queryStr = `
+      SELECT id, recipient_id AS "recipientId", title, message, channel, status,
+             COALESCE(category, 'general') AS category, COALESCE(is_read, false) AS "isRead",
+             sent_at AS "sentAt"
+      FROM notifications
+    `;
+    const params = [];
+    const conditions = ["recipient_id = 'all'", "recipient_id = 'teacher'", "recipient_id = 'teachers'"];
+
+    if (userId) {
+      params.push(userId);
+      conditions.push(`recipient_id = $${params.length}`);
+    }
+    if (teacherId) {
+      params.push(teacherId);
+      conditions.push(`recipient_id = $${params.length}`);
+    }
+    if (classId) {
+      params.push(classId);
+      conditions.push(`recipient_id = $${params.length}`);
+    }
+
+    if (conditions.length > 0) {
+      queryStr += ` WHERE ` + conditions.join(' OR ');
+    }
+
+    queryStr += ` ORDER BY sent_at DESC LIMIT 100`;
+
+    const { rows } = await query(queryStr, params);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/notifications', async (req, res) => {
+  const { recipientId, title, message, channel = 'in_app', category = 'general' } = req.body;
+  if (!recipientId || !title || !message) {
+    return res.status(400).json({ error: 'recipientId, title, and message are required' });
+  }
+  const id = `notif-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+  try {
+    const { rows } = await query(
+      `INSERT INTO notifications (id, recipient_id, title, message, channel, category, is_read, sent_at)
+       VALUES ($1, $2, $3, $4, $5, $6, false, CURRENT_TIMESTAMP)
+       RETURNING id, recipient_id AS "recipientId", title, message, channel, status, category, is_read AS "isRead", sent_at AS "sentAt"`,
+      [id, recipientId, title, message, channel, category]
+    );
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/notifications/:id/read', async (req, res) => {
+  const { id } = req.params;
+  try {
+    await query(`UPDATE notifications SET is_read = true, status = 'read' WHERE id = $1`, [id]);
+    res.json({ success: true, message: 'Notification marked as read' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/notifications/read-all', async (req, res) => {
+  const { recipientId } = req.body;
+  try {
+    if (recipientId) {
+      await query(
+        `UPDATE notifications SET is_read = true, status = 'read'
+         WHERE recipient_id = $1 OR recipient_id = 'all' OR recipient_id = 'teacher'`,
+        [recipientId]
+      );
+    } else {
+      await query(`UPDATE notifications SET is_read = true, status = 'read'`);
+    }
+    res.json({ success: true, message: 'All notifications marked as read' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
 // 10. SECURITY AUDIT LOGS API
 // ==========================================
 app.get('/api/audit-logs', async (req, res) => {
@@ -2027,9 +2115,9 @@ app.post('/api/timetable/send-whatsapp', async (req, res) => {
       const notifMessage = `Teacher Personal Schedule PDF sent via WhatsApp to ${teacherName} (${teacherPhone}). (Mode: ${activeDeliveryMode})`;
 
       await query(
-        `INSERT INTO notifications (id, recipient_id, title, message, channel, status, sent_at)
-         VALUES ($1, 'all', $2, $3, 'whatsapp', 'sent', CURRENT_TIMESTAMP)`,
-        [`notif-wa-${Date.now()}`, notifTitle, notifMessage]
+        `INSERT INTO notifications (id, recipient_id, title, message, channel, status, category, is_read, sent_at)
+         VALUES ($1, $2, $3, $4, 'in_app', 'sent', 'timetable', false, CURRENT_TIMESTAMP)`,
+        [`notif-wa-${Date.now()}`, teacherId || 'all', notifTitle, notifMessage]
       );
 
       const totalDelivered = deliveryLog.filter(d => d.status === 'delivered').length;
@@ -2214,13 +2302,18 @@ app.post('/api/timetable/send-whatsapp', async (req, res) => {
     const totalFailed = deliveryLog.filter(d => d.status === 'failed').length;
     const totalTarget = deliveryLog.length;
 
-    const notifTitle = `WhatsApp Broadcast: ${finalClassName} Timetable`;
-    const notifMessage = `Automated WhatsApp dispatch completed: Timetable PDF sent to Class Teacher (${teacher.name}) and ${students.length} students/guardians. (Mode: ${activeDeliveryMode})`;
+    let targetTeacherRecipient = classId || 'all';
+    if (classId) {
+      const clsRes = await query('SELECT class_teacher_id FROM classes WHERE id = $1', [classId]);
+      if (clsRes.rows.length > 0 && clsRes.rows[0].class_teacher_id) {
+        targetTeacherRecipient = clsRes.rows[0].class_teacher_id;
+      }
+    }
 
     await query(
-      `INSERT INTO notifications (id, recipient_id, title, message, channel, status, sent_at)
-       VALUES ($1, 'all', $2, $3, 'whatsapp', 'sent', CURRENT_TIMESTAMP)`,
-      [`notif-wa-${Date.now()}`, notifTitle, notifMessage]
+      `INSERT INTO notifications (id, recipient_id, title, message, channel, status, category, is_read, sent_at)
+       VALUES ($1, $2, $3, $4, 'in_app', 'sent', 'timetable', false, CURRENT_TIMESTAMP)`,
+      [`notif-wa-${Date.now()}`, targetTeacherRecipient, notifTitle, notifMessage]
     );
 
     await query(

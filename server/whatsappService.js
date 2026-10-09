@@ -11,6 +11,9 @@ let qrCodeDataUrl = null;
 let connectionStatus = 'disconnected'; // 'disconnected' | 'connecting' | 'qr_ready' | 'connected'
 let connectedUser = null;
 let isInitializing = false;
+let isPairingInProgress = false;
+let activeAuthState = null;
+let activeSaveCreds = null;
 
 function formatPhoneNumber(rawPhone) {
   if (!rawPhone) return null;
@@ -49,26 +52,29 @@ function clearAuthDir() {
   ensureAuthDir();
 }
 
-async function initWhatsApp(forceNew = false, phoneNumber = null) {
+async function initWhatsApp(forceNew = false, phoneNumberForPairing = null, clearAuth = false) {
+  // If already connected and not forcing new session, return current status
   if (connectionStatus === 'connected' && sock && !forceNew) {
     return { status: connectionStatus, connectedUser };
   }
 
-  // If forceNew is requested or previous session is disconnected, reset socket & clear stale auth files
-  if (forceNew) {
-    try {
-      if (sock) {
-        sock.ev.removeAllListeners();
-        sock.end(undefined);
-        sock = null;
-      }
-    } catch (_) {}
-    clearAuthDir();
-    connectionStatus = 'disconnected';
-    qrCodeDataUrl = null;
-    connectedUser = null;
-  } else if (isInitializing) {
+  // If already initializing and not forcing new session, return current state
+  if (isInitializing && !forceNew) {
     return { status: connectionStatus, qrCode: qrCodeDataUrl, connectedUser };
+  }
+
+  // Only clear auth directory if explicitly requested or logged out
+  if (clearAuth) {
+    clearAuthDir();
+  }
+
+  // If forceNew requested, close existing socket instance cleanly
+  if (forceNew && sock) {
+    try {
+      sock.ev.removeAllListeners();
+      sock.end(undefined);
+    } catch (_) {}
+    sock = null;
   }
 
   isInitializing = true;
@@ -78,36 +84,34 @@ async function initWhatsApp(forceNew = false, phoneNumber = null) {
     ensureAuthDir();
 
     const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
+    activeAuthState = state;
+    activeSaveCreds = saveCreds;
 
-    const browserTuple = Browsers ? Browsers.ubuntu('Chrome') : ['Ubuntu', 'Chrome', '120.0.0.0'];
+    // Use Desktop macOS tuple for max compatibility with Baileys 7.x pairing code protocol
+    const browserTuple = Browsers ? Browsers.macOS('Desktop') : ['Mac OS', 'Chrome', '121.0.6167.85'];
 
     sock = makeWASocket({
       auth: state,
-      printQRInTerminal: true,
+      printQRInTerminal: false,
       logger: pino({ level: 'silent' }),
       browser: browserTuple,
       syncFullHistory: false,
-      connectTimeoutMs: 25000,
-      defaultQueryTimeoutMs: 25000,
+      connectTimeoutMs: 60000,
+      defaultQueryTimeoutMs: 60000,
+      keepAliveIntervalMs: 25000,
+      generateHighQualityLinkPreview: false,
     });
 
-    let pairingCode = null;
-    if (phoneNumber && !state.creds.registered) {
-      const cleanPhone = phoneNumber.replace(/[^0-9]/g, '');
-      if (cleanPhone.length >= 10) {
-        try {
-          // Wait slightly for socket connection before requesting pairing code
-          setTimeout(async () => {
-            try {
-              pairingCode = await sock.requestPairingCode(cleanPhone);
-              console.log(`🔑 WhatsApp 8-digit Pairing Code generated: ${pairingCode}`);
-            } catch (pErr) {
-              console.error('Error requesting pairing code:', pErr.message);
-            }
-          }, 1500);
-        } catch (_) {}
+    sock.ev.on('creds.update', async () => {
+      try {
+        ensureAuthDir();
+        await saveCreds();
+      } catch (saveErr) {
+        console.warn('Silent note on creds update save:', saveErr.message);
       }
-    }
+    });
+
+    let requestedPairingCode = null;
 
     const initPromise = new Promise((resolve) => {
       let resolved = false;
@@ -120,15 +124,47 @@ async function initWhatsApp(forceNew = false, phoneNumber = null) {
         }
       };
 
-      // 12-second safety fallback timeout (allows HTTP requests to receive the live generated QR code)
+      // 15-second safety fallback timeout to return HTTP response
       const timer = setTimeout(() => {
-        finish({ status: connectionStatus, qrCode: qrCodeDataUrl, connectedUser });
-      }, 12000);
+        finish({
+          status: connectionStatus,
+          qrCode: qrCodeDataUrl,
+          connectedUser,
+          pairingCode: requestedPairingCode
+        });
+      }, 15000);
+
+      // If phone number is passed for 8-digit pairing code and device is not registered
+      if (phoneNumberForPairing && !state.creds.registered) {
+        let cleanPhone = String(phoneNumberForPairing).replace(/[^0-9]/g, '');
+        if (cleanPhone.startsWith('0') && cleanPhone.length === 10) cleanPhone = '94' + cleanPhone.substring(1);
+        else if (cleanPhone.length === 9) cleanPhone = '94' + cleanPhone;
+
+        setTimeout(async () => {
+          try {
+            if (sock && !state.creds.registered) {
+              isPairingInProgress = true;
+              requestedPairingCode = await sock.requestPairingCode(cleanPhone);
+              console.log(`🔑 WhatsApp 8-digit Pairing Code generated: ${requestedPairingCode}`);
+              clearTimeout(timer);
+              finish({
+                status: connectionStatus,
+                qrCode: null,
+                connectedUser: null,
+                pairingCode: requestedPairingCode
+              });
+            }
+          } catch (pErr) {
+            console.error('Error requesting pairing code in init:', pErr.message);
+            isPairingInProgress = false;
+          }
+        }, 1800);
+      }
 
       sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
 
-        if (qr) {
+        if (qr && !isPairingInProgress) {
           try {
             qrCodeDataUrl = await QRCode.toDataURL(qr, { width: 300, margin: 2 });
             connectionStatus = 'qr_ready';
@@ -144,23 +180,30 @@ async function initWhatsApp(forceNew = false, phoneNumber = null) {
           const statusCode = lastDisconnect?.error?.output?.statusCode;
           console.log(`🔌 WhatsApp connection closed. StatusCode: ${statusCode}`);
 
-          if (statusCode === DisconnectReason.loggedOut || statusCode === 401 || statusCode === 408) {
+          isPairingInProgress = false;
+          isInitializing = false;
+          sock = null;
+
+          // ONLY clear auth directory on explicit device logout (401 / DisconnectReason.loggedOut)
+          if (statusCode === DisconnectReason.loggedOut || statusCode === 401) {
+            console.log('⚠️ WhatsApp account logged out from phone. Clearing credentials.');
             connectionStatus = 'disconnected';
             connectedUser = null;
             qrCodeDataUrl = null;
-            sock = null;
             clearAuthDir();
-            clearTimeout(timer);
-            finish({ status: connectionStatus, qrCode: null, connectedUser: null });
           } else {
+            // Transient timeout (408), server restart (515), etc. - keep auth files intact!
+            console.log('ℹ️ Transient WhatsApp socket close. Retaining credentials for auto-reconnect.');
             connectionStatus = 'disconnected';
-            isInitializing = false;
-            sock = null;
           }
+
+          clearTimeout(timer);
+          finish({ status: connectionStatus, qrCode: null, connectedUser: null });
         } else if (connection === 'open') {
           connectionStatus = 'connected';
           qrCodeDataUrl = null;
           isInitializing = false;
+          isPairingInProgress = false;
           const userJid = sock.user?.id || '';
           connectedUser = userJid.split(':')[0] || userJid.split('@')[0] || 'Connected';
           console.log(`✅ WhatsApp Web bot connected successfully as: ${connectedUser}`);
@@ -170,18 +213,10 @@ async function initWhatsApp(forceNew = false, phoneNumber = null) {
       });
     });
 
-    sock.ev.on('creds.update', async () => {
-      try {
-        ensureAuthDir();
-        await saveCreds();
-      } catch (saveErr) {
-        console.warn('Silent note on creds update save:', saveErr.message);
-      }
-    });
-
     return await initPromise;
   } catch (err) {
     isInitializing = false;
+    isPairingInProgress = false;
     connectionStatus = 'disconnected';
     console.error('Error initializing WhatsApp socket:', err);
     throw err;
@@ -189,10 +224,10 @@ async function initWhatsApp(forceNew = false, phoneNumber = null) {
 }
 
 function getWhatsAppStatus() {
-  // If disconnected and not already initializing, auto-start initialization in background!
-  if (connectionStatus === 'disconnected' && !isInitializing) {
-    console.log('🔄 WhatsApp is disconnected. Auto-initializing WhatsApp socket in background...');
-    initWhatsApp(true).catch((err) => console.error('Auto-init error:', err.message));
+  // Auto-connect background socket without clearing auth files if disconnected
+  if (connectionStatus === 'disconnected' && !isInitializing && !isPairingInProgress) {
+    console.log('🔄 WhatsApp is disconnected. Auto-connecting socket in background...');
+    initWhatsApp(false).catch((err) => console.error('Auto-connect background note:', err.message));
   }
 
   return {
@@ -205,7 +240,7 @@ function getWhatsAppStatus() {
 
 async function sendWhatsAppMessage(toPhone, text) {
   if (connectionStatus !== 'connected' || !sock) {
-    throw new Error('WhatsApp Web is not connected. Please scan the QR code first.');
+    throw new Error('WhatsApp Web is not connected. Please scan the QR code or enter 8-digit pairing code first.');
   }
 
   const jid = formatPhoneNumber(toPhone);
@@ -223,7 +258,7 @@ async function sendWhatsAppMessage(toPhone, text) {
 
 async function sendWhatsAppDocument(toPhone, documentBuffer, fileName, caption, mimetype = 'application/pdf') {
   if (connectionStatus !== 'connected' || !sock) {
-    throw new Error('WhatsApp Web is not connected. Please scan the QR code first.');
+    throw new Error('WhatsApp Web is not connected. Please scan the QR code or enter 8-digit pairing code first.');
   }
 
   const jid = formatPhoneNumber(toPhone);
@@ -259,6 +294,7 @@ async function logoutWhatsApp() {
   qrCodeDataUrl = null;
   sock = null;
   isInitializing = false;
+  isPairingInProgress = false;
 
   clearAuthDir();
 
@@ -267,6 +303,7 @@ async function logoutWhatsApp() {
 
 async function getPairingCode(phoneNumber) {
   if (!phoneNumber) throw new Error('Phone number is required for pairing code');
+
   let cleanPhone = String(phoneNumber).replace(/[^0-9]/g, '');
   if (cleanPhone.startsWith('0') && cleanPhone.length === 10) {
     cleanPhone = '94' + cleanPhone.substring(1);
@@ -274,15 +311,35 @@ async function getPairingCode(phoneNumber) {
     cleanPhone = '94' + cleanPhone;
   }
 
-  if (!sock) {
-    await initWhatsApp(true);
+  isPairingInProgress = true;
+
+  // If socket is already active and auth state is ready
+  if (sock && activeAuthState && !activeAuthState.creds.registered) {
+    try {
+      const code = await sock.requestPairingCode(cleanPhone);
+      console.log(`🔑 WhatsApp 8-digit Pairing Code generated directly: ${code}`);
+      return { success: true, pairingCode: code };
+    } catch (err) {
+      console.warn('Direct pairing code request failed, initializing dedicated socket:', err.message);
+    }
+  }
+
+  // Initialize socket preserving auth files, passing pairing phone
+  const result = await initWhatsApp(true, cleanPhone, false);
+  if (result && result.pairingCode) {
+    return { success: true, pairingCode: result.pairingCode };
   }
 
   if (sock && sock.requestPairingCode) {
-    const code = await sock.requestPairingCode(cleanPhone);
-    return { success: true, pairingCode: code };
+    try {
+      const code = await sock.requestPairingCode(cleanPhone);
+      return { success: true, pairingCode: code };
+    } catch (err) {
+      throw new Error(`Failed to request pairing code: ${err.message}`);
+    }
   }
-  throw new Error('Socket not ready for pairing code request');
+
+  throw new Error('WhatsApp socket not ready for pairing code. Please try scanning QR code.');
 }
 
 module.exports = {
@@ -294,3 +351,4 @@ module.exports = {
   formatPhoneNumber,
   getPairingCode,
 };
+

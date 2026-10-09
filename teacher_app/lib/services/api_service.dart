@@ -7,6 +7,7 @@ import '../models/student_model.dart';
 import '../models/leave_model.dart';
 import '../models/announcement_model.dart';
 import '../models/timetable_model.dart';
+import '../models/app_notification_model.dart';
 
 class ApiService {
   final http.Client client = http.Client();
@@ -274,5 +275,53 @@ class ApiService {
       TimetableSlotModel(id: 'ts-3', classId: 'Grade 11-A', subjectId: 'Mathematics', teacherId: teacherId, dayOfWeek: 2, periodNo: 2, startTime: '08:40 AM', endTime: '09:20 AM', room: 'Hall 5'),
       TimetableSlotModel(id: 'ts-4', classId: 'Grade 10-A', subjectId: 'Mathematics', teacherId: teacherId, dayOfWeek: 3, periodNo: 4, startTime: '10:20 AM', endTime: '11:00 AM', room: 'Hall 3'),
     ];
+  }
+
+  // 10. Fetch Notifications (Targeted to Teacher)
+  Future<List<AppNotificationModel>> fetchNotifications({String? userId, String? teacherId, String? classId}) async {
+    final queryParams = <String>[];
+    if (userId != null && userId.isNotEmpty) queryParams.add('userId=$userId');
+    if (teacherId != null && teacherId.isNotEmpty) queryParams.add('teacherId=$teacherId');
+    if (classId != null && classId.isNotEmpty) queryParams.add('classId=$classId');
+
+    final queryString = queryParams.isNotEmpty ? '?${queryParams.join('&')}' : '';
+    final url = Uri.parse('${ApiConstants.baseUrl}${ApiConstants.notificationsEndpoint}$queryString');
+
+    try {
+      final response = await client.get(url, headers: headers);
+      if (response.statusCode == 200) {
+        final List list = jsonDecode(response.body);
+        return list.map((item) => AppNotificationModel.fromJson(item)).toList();
+      }
+    } catch (e) {
+      debugPrint('API Error fetching notifications: $e');
+    }
+    return [];
+  }
+
+  // 11. Mark Single Notification as Read
+  Future<bool> markNotificationAsRead(String notificationId) async {
+    final url = Uri.parse('${ApiConstants.baseUrl}${ApiConstants.notificationsEndpoint}/$notificationId/read');
+    try {
+      final response = await client.put(url, headers: headers);
+      return response.statusCode == 200;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // 12. Mark All Notifications as Read
+  Future<bool> markAllNotificationsAsRead(String recipientId) async {
+    final url = Uri.parse('${ApiConstants.baseUrl}${ApiConstants.notificationsEndpoint}/read-all');
+    try {
+      final response = await client.put(
+        url,
+        headers: headers,
+        body: jsonEncode({'recipientId': recipientId}),
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      return false;
+    }
   }
 }

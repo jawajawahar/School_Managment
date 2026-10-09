@@ -10,6 +10,7 @@ import '../providers/notification_provider.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/server_settings_dialog.dart';
 import 'login_screen.dart';
+import 'notifications_screen.dart';
 
 class TeacherDashboardScreen extends StatefulWidget {
   final Function(int)? onNavigate;
@@ -71,6 +72,11 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       Provider.of<AttendanceProvider>(context, listen: false).loadClasses(preferredClassId: user?.assignedClassId);
       Provider.of<LeaveProvider>(context, listen: false).fetchLeaveRequests(teacherName);
       Provider.of<NotificationProvider>(context, listen: false).fetchAnnouncements();
+      Provider.of<NotificationProvider>(context, listen: false).fetchTeacherNotifications(
+        userId: user?.id,
+        teacherId: user?.teacherId,
+        classId: user?.assignedClassId,
+      );
     });
   }
 
@@ -139,7 +145,59 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                           ),
                         ),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 6),
+                      IconButton(
+                        icon: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: AppColors.primary.withOpacity(0.1),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.notifications_active_rounded,
+                                color: AppColors.primary,
+                                size: 18,
+                              ),
+                            ),
+                            if (notifProvider.unreadCount > 0)
+                              Positioned(
+                                top: -2,
+                                right: -2,
+                                child: Container(
+                                  padding: const EdgeInsets.all(3),
+                                  decoration: const BoxDecoration(
+                                    color: AppColors.absentRed,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  constraints: const BoxConstraints(
+                                    minWidth: 16,
+                                    minHeight: 16,
+                                  ),
+                                  child: Text(
+                                    '${notifProvider.unreadCount}',
+                                    style: GoogleFonts.inter(
+                                      color: Colors.white,
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                        tooltip: 'Notifications',
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+                          );
+                        },
+                      ),
+                      const SizedBox(width: 4),
                       IconButton(
                         icon: Container(
                           padding: const EdgeInsets.all(8),

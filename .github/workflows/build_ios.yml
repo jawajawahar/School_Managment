@@ -1,9 +1,9 @@
 name: Build iOS IPA
 
 on:
+  workflow_dispatch:
   push:
     branches: [ main, master ]
-  workflow_dispatch:
 
 jobs:
   build-ios:
@@ -12,26 +12,31 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Set up Flutter
+      - name: Set up Flutter SDK
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+          cache: true
 
       - name: Install Dependencies
         run: |
           cd teacher_app
           flutter pub get
 
-      - name: Build iOS Application (Unsigned IPA)
+      - name: Build iOS IPA (Unsigned / Ad-Hoc)
         run: |
           cd teacher_app
-          flutter build ios --release --no-codesign
+          flutter build ipa --no-codesign
+
+      - name: Create IPA Package Directory
+        run: |
+          cd teacher_app/build/ios/archive/Runner.xcarchive/Products/Applications
           mkdir -p Payload
-          mv build/ios/iphoneos/Runner.app Payload/
+          cp -r Runner.app Payload/
           zip -r GSMS_Teacher_App.ipa Payload
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: GSMS_Teacher_App_IPA
-          path: teacher_app/GSMS_Teacher_App.ipa
+          name: GSMS_Teacher_App_iOS_IPA
+          path: teacher_app/build/ios/archive/Runner.xcarchive/Products/Applications/GSMS_Teacher_App.ipa

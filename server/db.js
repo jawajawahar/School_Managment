@@ -76,8 +76,13 @@ const initDatabase = async () => {
         message TEXT NOT NULL,
         channel VARCHAR(30) DEFAULT 'in_app',
         status VARCHAR(30) DEFAULT 'sent',
+        category VARCHAR(50) DEFAULT 'general',
+        is_read BOOLEAN DEFAULT FALSE,
         sent_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
+
+      ALTER TABLE notifications ADD COLUMN IF NOT EXISTS category VARCHAR(50) DEFAULT 'general';
+      ALTER TABLE notifications ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT FALSE;
 
       ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS unit VARCHAR(30);
       ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS reorder_level INT DEFAULT 0;

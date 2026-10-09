@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 class AppColors {
   // Primary Palette - Rich Forest Emerald & Modern Teal
   static const Color primary = Color(0xFF0F5132);
+  static const Color secondary = Color(0xFF0D9488);
   static const Color primaryDark = Color(0xFF0A3622);
   static const Color primaryLight = Color(0xFF198754);
   static const Color accentTeal = Color(0xFF0D9488);
