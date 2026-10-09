@@ -222,27 +222,11 @@ class ApiService {
         final List list = jsonDecode(response.body);
         return list.map((item) => AnnouncementModel.fromJson(item)).toList();
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('API Error fetching announcements: $e');
+    }
 
-    // Fallback Announcements
-    return [
-      AnnouncementModel(
-        id: 'ann-1',
-        title: '🚨 Monthly Staff & Principal Briefing',
-        body: 'All teachers are requested to assemble in the main hall on Friday at 2:00 PM for the academic review.',
-        createdBy: 'Principal Office',
-        createdAt: '2026-10-08 08:30 AM',
-        isEmergency: true,
-      ),
-      AnnouncementModel(
-        id: 'ann-2',
-        title: '📘 Term II Examination Mark Submission',
-        body: 'Please ensure all Grade 9 - 11 term evaluation marks are entered by Monday 5:00 PM.',
-        createdBy: 'Academic Head',
-        createdAt: '2026-10-07 10:15 AM',
-        isEmergency: false,
-      ),
-    ];
+    return [];
   }
 
   // 8. Send Priority Notification Alert to Principal

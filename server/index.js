@@ -759,6 +759,57 @@ app.put('/api/leave-requests/:id/status', async (req, res) => {
   }
 });
 
+// ==========================================
+// 7B. PRINCIPAL BROADCAST ANNOUNCEMENTS API
+// ==========================================
+app.get('/api/announcements', async (req, res) => {
+  try {
+    const { rows } = await query(`
+      SELECT 
+        id, 
+        title, 
+        body, 
+        COALESCE(created_by, 'Principal Office') AS "createdBy",
+        TO_CHAR(created_at, 'YYYY-MM-DD HH24:MI') AS "createdAt",
+        COALESCE(is_emergency, false) AS "isEmergency"
+      FROM announcements
+      ORDER BY created_at DESC
+    `);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/announcements', async (req, res) => {
+  const { id: reqId, title, body, createdBy, isEmergency } = req.body;
+  const id = reqId || `ann-${Date.now()}`;
+  const author = createdBy || 'Principal Office';
+  try {
+    const { rows } = await query(
+      `INSERT INTO announcements (id, title, body, created_by, is_emergency)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, title, body, created_by AS "createdBy", 
+                 TO_CHAR(created_at, 'YYYY-MM-DD HH24:MI') AS "createdAt", 
+                 COALESCE(is_emergency, false) AS "isEmergency"`,
+      [id, title, body, author, isEmergency === true]
+    );
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/announcements/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    await query('DELETE FROM announcements WHERE id = $1', [id]);
+    res.json({ success: true, message: `Announcement ${id} deleted` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 const admissionRequestColumns = `
   id, student_name AS "studentName", grade_applying AS "gradeApplying", guardian_name AS "guardianName",
   contact_no AS "contactNo", previous_school AS "previousSchool", status,
