@@ -164,6 +164,7 @@ class MarkAttendanceScreen extends StatelessWidget {
               child: attProvider.isLoadingStudents
                   ? const Center(child: CircularProgressIndicator())
                   : ListView.builder(
+                      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
                       padding: const EdgeInsets.all(16),
                       itemCount: attProvider.students.length,
                       itemBuilder: (context, index) {

@@ -45,6 +45,15 @@ class GSMSTeacherApp extends StatelessWidget {
             elevation: 0,
           ),
         ),
+        builder: (context, child) {
+          return GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onTap: () {
+              FocusManager.instance.primaryFocus?.unfocus();
+            },
+            child: child,
+          );
+        },
         home: Consumer<AuthProvider>(
           builder: (context, auth, _) {
             if (auth.isAuthenticated) {
