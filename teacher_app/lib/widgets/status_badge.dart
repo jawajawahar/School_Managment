@@ -40,8 +40,8 @@ class StatusBadge extends StatelessWidget {
         icon = Icons.access_time_filled;
         break;
       case 'pending':
-        bg = AppColors.accentAmber.withValues(alpha: 0.15);
-        fg = AppColors.accentAmber;
+        bg = AppColors.lateOrange.withValues(alpha: 0.15);
+        fg = AppColors.lateOrange;
         label = 'PENDING APPROVAL';
         icon = Icons.hourglass_top_rounded;
         break;

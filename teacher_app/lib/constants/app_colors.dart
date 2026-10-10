@@ -1,78 +1,45 @@
 import 'package:flutter/material.dart';
 
 class AppColors {
-  // Ultra-Premium Royal Indigo & Midnight Obsidian Palette (No Green Banners)
-  static const Color primary = Color(0xFF4F46E5);      // Royal Indigo
-  static const Color primaryDark = Color(0xFF1E1B4B);  // Midnight Deep Indigo
-  static const Color primaryLight = Color(0xFF6366F1); // Bright Violet
-  static const Color secondary = Color(0xFF2563EB);    // Electric Cobalt Blue
-  static const Color accentTeal = Color(0xFF06B6D4);    // Cyan Glow
-  static const Color accentAmber = Color(0xFFF59E0B);   // Amber Gold
+  // Professional 2-3 Color Executive Palette
+  static const Color primary = Color(0xFF1E293B);      // Executive Dark Slate
+  static const Color primaryDark = Color(0xFF0F172A);  // Deep Midnight Obsidian
+  static const Color accent = Color(0xFF2563EB);       // Professional Royal Blue
+  static const Color accentLight = Color(0xFFDBEAFE);  // Soft Slate Blue
 
-  // Status Colors (Attendance & Alerts)
-  static const Color presentGreen = Color(0xFF10B981);
-  static const Color absentRed = Color(0xFFF43F5E);
-  static const Color lateOrange = Color(0xFFF59E0B);
-  static const Color excusedBlue = Color(0xFF3B82F6);
+  // Minimal Muted Status Tokens
+  static const Color presentGreen = Color(0xFF16A34A);
+  static const Color absentRed = Color(0xFFDC2626);
+  static const Color lateOrange = Color(0xFFD97706);
+  static const Color excusedBlue = Color(0xFF2563EB);
 
-  // Background & Surface Tokens
-  static const Color background = Color(0xFFF8FAFC);
-  static const Color surface = Color(0xFFFFFFFF);
-  static const Color darkBackground = Color(0xFF0F172A);
-  static const Color darkSurface = Color(0xFF1E293B);
+  // Surface & Neutral Backgrounds
+  static const Color background = Color(0xFFF8FAFC);   // Crisp Light Slate Grey
+  static const Color surface = Color(0xFFFFFFFF);      // Clean Pure White Card
+  static const Color border = Color(0xFFE2E8F0);       // Subtle Slate Border
 
-  // High-Contrast Premium Typography Colors
-  static const Color textPrimary = Color(0xFF0F172A);   // Slate Obsidian Black
-  static const Color textSecondary = Color(0xFF475569); // Slate Dark Grey
-  static const Color textMuted = Color(0xFF94A3B8);     // Muted Slate
+  // High-Contrast Enterprise Typography
+  static const Color textPrimary = Color(0xFF0F172A);   // Deep Slate Black
+  static const Color textSecondary = Color(0xFF475569); // Slate Subtitle Grey
+  static const Color textMuted = Color(0xFF94A3B8);     // Light Muted Grey
 
-  // Premium Gradients
-  static const LinearGradient primaryGradient = LinearGradient(
+  // Subtle Executive Hero Gradient (Dark Slate to Obsidian)
+  static const LinearGradient executiveGradient = LinearGradient(
     colors: [
-      Color(0xFF0F172A), // Slate Midnight
-      Color(0xFF1E1B4B), // Royal Dark Indigo
-      Color(0xFF312E81), // Deep Violet
+      Color(0xFF1E293B),
+      Color(0xFF0F172A),
     ],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
 
-  static const LinearGradient cobaltGradient = LinearGradient(
-    colors: [
-      Color(0xFF1E40AF),
-      Color(0xFF3B82F6),
-    ],
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-  );
-
-  static const LinearGradient cardGradient = LinearGradient(
-    colors: [Color(0xFFFFFFFF), Color(0xFFF8FAFC)],
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-  );
-
-  static const LinearGradient amberGradient = LinearGradient(
-    colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-  );
-
-  // Soft Glassmorphic & Elevation Shadows
+  // Soft Professional Card Shadow
   static List<BoxShadow> softShadow = [
     BoxShadow(
-      color: const Color(0xFF0F172A).withValues(alpha: 0.06),
-      blurRadius: 20,
-      spreadRadius: 1,
-      offset: const Offset(0, 6),
-    ),
-  ];
-
-  static List<BoxShadow> primaryShadow = [
-    BoxShadow(
-      color: const Color(0xFF1E1B4B).withValues(alpha: 0.35),
-      blurRadius: 24,
-      offset: const Offset(0, 10),
+      color: const Color(0xFF0F172A).withValues(alpha: 0.04),
+      blurRadius: 12,
+      spreadRadius: 0,
+      offset: const Offset(0, 4),
     ),
   ];
 }

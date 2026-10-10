@@ -70,10 +70,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       return Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: AppColors.secondary.withValues(alpha: 0.12),
+          color: AppColors.accent.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(12),
         ),
-        child: const Icon(Icons.campaign_rounded, color: AppColors.secondary, size: 22),
+        child: const Icon(Icons.campaign_rounded, color: AppColors.accent, size: 22),
       );
     }
 

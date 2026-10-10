@@ -47,42 +47,50 @@ class _TimetableScreenState extends State<TimetableScreen> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: Text(
-          'Weekly Teaching Timetable',
-          style: GoogleFonts.outfit(fontWeight: FontWeight.w800, color: AppColors.textPrimary, fontSize: 20),
+          'Teaching Timetable',
+          style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: AppColors.textPrimary, fontSize: 18),
         ),
         backgroundColor: Colors.white,
-        elevation: 0.5,
+        elevation: 0,
+        surfaceTintColor: Colors.transparent,
+        bottom: const PreferredSize(
+          preferredSize: Size.fromHeight(1),
+          child: Divider(height: 1, color: AppColors.border),
+        ),
       ),
       body: SafeArea(
         child: Column(
           children: [
-            // Day Selector Tabs
+            // Day Selector Tabs (Responsive Row)
             Container(
               color: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: List.generate(5, (index) {
                   final dayNo = index + 1;
                   final isSelected = _selectedDay == dayNo;
 
-                  return GestureDetector(
-                    onTap: () => setState(() => _selectedDay = dayNo),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: isSelected ? AppColors.primary : AppColors.background,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: isSelected ? AppColors.primary : Colors.black12,
+                  return Expanded(
+                    child: GestureDetector(
+                      onTap: () => setState(() => _selectedDay = dayNo),
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 2),
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        decoration: BoxDecoration(
+                          color: isSelected ? AppColors.accent : AppColors.background,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: isSelected ? AppColors.accent : AppColors.border,
+                          ),
                         ),
-                      ),
-                      child: Text(
-                        _days[index],
-                        style: GoogleFonts.outfit(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w900,
-                          color: isSelected ? Colors.white : AppColors.textSecondary,
+                        child: Text(
+                          _days[index],
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: isSelected ? Colors.white : AppColors.textSecondary,
+                          ),
                         ),
                       ),
                     ),
@@ -91,7 +99,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
               ),
             ),
 
-            const Divider(height: 1),
+            const Divider(height: 1, color: AppColors.border),
 
             // Period Schedule List
             Expanded(
@@ -102,51 +110,52 @@ class _TimetableScreenState extends State<TimetableScreen> {
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              const Icon(Icons.event_seat_rounded, size: 48, color: AppColors.textMuted),
-                              const SizedBox(height: 10),
+                              const Icon(Icons.event_seat_outlined, size: 40, color: AppColors.textMuted),
+                              const SizedBox(height: 8),
                               Text(
-                                'No allocated periods on ${_days[_selectedDay - 1]}',
-                                style: GoogleFonts.inter(color: AppColors.textMuted, fontSize: 14),
+                                'No periods scheduled for ${_days[_selectedDay - 1]}',
+                                style: GoogleFonts.inter(color: AppColors.textMuted, fontSize: 13),
                               ),
                             ],
                           ),
                         )
                       : ListView.builder(
-                          padding: const EdgeInsets.all(20),
+                          padding: const EdgeInsets.all(16),
                           itemCount: filteredSlots.length,
                           itemBuilder: (context, index) {
                             final slot = filteredSlots[index];
                             return GlassCard(
-                              margin: const EdgeInsets.only(bottom: 12),
-                              padding: const EdgeInsets.all(16),
+                              margin: const EdgeInsets.only(bottom: 8),
+                              padding: const EdgeInsets.all(12),
                               child: Row(
                                 children: [
                                   // Period Badge
                                   Container(
-                                    padding: const EdgeInsets.all(12),
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                                     decoration: BoxDecoration(
-                                      color: AppColors.primary.withValues(alpha: 0.12),
-                                      borderRadius: BorderRadius.circular(12),
+                                      color: AppColors.background,
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(color: AppColors.border),
                                     ),
                                     child: Column(
                                       children: [
                                         Text(
-                                          'Period',
-                                          style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.primary),
+                                          'PERIOD',
+                                          style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w700, color: AppColors.textMuted),
                                         ),
                                         Text(
                                           '${slot.periodNo}',
                                           style: GoogleFonts.outfit(
-                                            fontSize: 22,
-                                            fontWeight: FontWeight.w900,
-                                            color: AppColors.primary,
+                                            fontSize: 20,
+                                            fontWeight: FontWeight.bold,
+                                            color: AppColors.textPrimary,
                                           ),
                                         ),
                                       ],
                                     ),
                                   ),
 
-                                  const SizedBox(width: 14),
+                                  const SizedBox(width: 12),
 
                                   Expanded(
                                     child: Column(
@@ -155,37 +164,35 @@ class _TimetableScreenState extends State<TimetableScreen> {
                                         Text(
                                           slot.subjectId,
                                           style: GoogleFonts.outfit(
-                                            fontSize: 17,
-                                            fontWeight: FontWeight.w800,
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.bold,
                                             color: AppColors.textPrimary,
                                           ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Row(
+                                          children: [
+                                            Text(
+                                              'Class: ${slot.classId}',
+                                              style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+                                            ),
+                                            const SizedBox(width: 10),
+                                            Text(
+                                              'Room: ${slot.room}',
+                                              style: GoogleFonts.inter(fontSize: 12, color: AppColors.accent, fontWeight: FontWeight.w700),
+                                            ),
+                                          ],
                                         ),
                                         const SizedBox(height: 4),
                                         Row(
                                           children: [
-                                            const Icon(Icons.class_rounded, size: 14, color: AppColors.textMuted),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              slot.classId,
-                                              style: GoogleFonts.inter(fontSize: 13, color: AppColors.textSecondary, fontWeight: FontWeight.w600),
-                                            ),
-                                            const SizedBox(width: 12),
-                                            const Icon(Icons.location_on_rounded, size: 14, color: AppColors.accentTeal),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              slot.room,
-                                              style: GoogleFonts.outfit(fontSize: 13, color: AppColors.accentTeal, fontWeight: FontWeight.w800),
-                                            ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 6),
-                                        Row(
-                                          children: [
-                                            const Icon(Icons.access_time_rounded, size: 13, color: AppColors.textMuted),
+                                            const Icon(Icons.access_time_rounded, size: 12, color: AppColors.textMuted),
                                             const SizedBox(width: 4),
                                             Text(
                                               '${slot.startTime} - ${slot.endTime}',
-                                              style: GoogleFonts.inter(fontSize: 12, color: AppColors.textMuted),
+                                              style: GoogleFonts.inter(fontSize: 11, color: AppColors.textMuted),
                                             ),
                                           ],
                                         ),

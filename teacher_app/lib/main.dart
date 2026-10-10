@@ -34,7 +34,7 @@ class GSMSTeacherApp extends StatelessWidget {
           colorScheme: ColorScheme.fromSeed(
             seedColor: AppColors.primary,
             primary: AppColors.primary,
-            secondary: AppColors.accentTeal,
+            secondary: AppColors.accent,
             surface: AppColors.surface,
           ),
           textTheme: GoogleFonts.interTextTheme(Theme.of(context).textTheme),
