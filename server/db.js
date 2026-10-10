@@ -113,6 +113,9 @@ const initDatabase = async () => {
       ALTER TABLE admission_requests ADD COLUMN IF NOT EXISTS student_roster JSONB;
 
       ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+      ALTER TABLE students ADD COLUMN IF NOT EXISTS phone VARCHAR(30);
+      ALTER TABLE students ADD COLUMN IF NOT EXISTS guardian_phone VARCHAR(30);
+      ALTER TABLE students ADD COLUMN IF NOT EXISTS guardian_name VARCHAR(150);
       ALTER TABLE students ADD COLUMN IF NOT EXISTS enrolled_subject_ids JSONB DEFAULT '[]'::jsonb;
       ALTER TABLE welfare_programs ADD COLUMN IF NOT EXISTS banner_url TEXT;
       ALTER TABLE welfare_programs ADD COLUMN IF NOT EXISTS is_archived BOOLEAN DEFAULT FALSE;

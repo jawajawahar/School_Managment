@@ -492,9 +492,9 @@ app.get('/api/students', async (req, res) => {
         s.class_id AS "classId",
         TO_CHAR(s.admission_date, 'YYYY-MM-DD') AS "admissionDate",
         s.status,
-        COALESCE(s.phone, s.guardian_phone, u.phone) AS "phone",
-        COALESCE(s.guardian_phone, s.phone, u.phone) AS "guardianPhone",
-        s.guardian_name AS "guardianName",
+        COALESCE(u.phone, '') AS "phone",
+        COALESCE(u.phone, '') AS "guardianPhone",
+        '' AS "guardianName",
         COALESCE(s.enrolled_subject_ids, '[]'::jsonb) AS "enrolledSubjectIds"
       FROM students s
       LEFT JOIN users u ON s.user_id = u.id
