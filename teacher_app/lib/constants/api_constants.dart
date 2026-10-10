@@ -26,10 +26,7 @@ class ApiConstants {
     if (_customHost != null && _customHost!.isNotEmpty) {
       return _customHost!;
     }
-    if (defaultTargetPlatform == TargetPlatform.android) {
-      return 'http://10.0.2.2:5000/api';
-    }
-    return 'http://172.20.10.3:5000/api';
+    return 'https://school-managment-jk78.onrender.com/api';
   }
 
   // Auth
