@@ -1,473 +1,363 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../constants/app_colors.dart';
 import '../models/student_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/attendance_provider.dart';
-import '../widgets/glass_card.dart';
-import '../widgets/server_settings_dialog.dart';
+import '../widgets/app_ui.dart';
 
 class MarkAttendanceScreen extends StatelessWidget {
   const MarkAttendanceScreen({super.key});
+
+  static const List<_StatusOption> _statusOptions = [
+    _StatusOption('present', 'P', 'Present', AppColors.presentGreen),
+    _StatusOption('absent', 'A', 'Absent', AppColors.absentRed),
+    _StatusOption('late', 'L', 'Late', AppColors.lateOrange),
+    _StatusOption('excused', 'E', 'Excused', AppColors.excusedBlue),
+  ];
+
+  Future<void> _refresh(BuildContext context) async {
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    final attProvider = Provider.of<AttendanceProvider>(context, listen: false);
+    await auth.refreshProfile();
+    final fresh = auth.currentUser;
+    await attProvider.loadClasses(preferredClassId: fresh?.assignedClassId, userRole: fresh?.role, user: fresh);
+  }
+
+  Future<void> _pickDate(BuildContext context, AttendanceProvider attProvider) async {
+    final current = DateTime.tryParse(attProvider.selectedDate) ?? DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: current,
+      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+      lastDate: DateTime.now(),
+    );
+    if (picked != null) attProvider.setDate(picked);
+  }
+
+  Future<void> _save(BuildContext context, AttendanceProvider attProvider, String teacherName) async {
+    final ok = await attProvider.submitAttendance(teacherName);
+    if (!context.mounted) return;
+    showAppSnackBar(
+      context,
+      attProvider.message ?? (ok ? 'Attendance saved!' : 'Attendance was not saved.'),
+      isError: !ok,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final attProvider = Provider.of<AttendanceProvider>(context);
     final user = Provider.of<AuthProvider>(context).currentUser;
 
-    final totalStudents = attProvider.students.length;
-    final markedStudents = attProvider.students.where((s) =>
-        s.attendanceStatus.isNotEmpty &&
-        s.attendanceStatus != 'unmarked' &&
-        s.attendanceStatus != 'select').length;
-    final isAllMarked = totalStudents > 0 && markedStudents == totalStudents;
+    final total = attProvider.students.length;
+    final marked = attProvider.presentCount + attProvider.absentCount + attProvider.lateCount + attProvider.excusedCount;
+    final isAllMarked = total > 0 && marked == total;
+    final hasClass = attProvider.selectedClassId != null;
+    final userClasses = attProvider.getClassesForUser(user);
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: Text(
-          'Daily Attendance',
-          style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: AppColors.textPrimary, fontSize: 18),
-        ),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        surfaceTintColor: Colors.transparent,
-        bottom: const PreferredSize(
-          preferredSize: Size.fromHeight(1),
-          child: Divider(height: 1, color: AppColors.border),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings_outlined, color: AppColors.textPrimary, size: 20),
-            tooltip: 'Server Settings',
-            onPressed: () => ServerSettingsDialog.show(context),
+      body: Column(
+        children: [
+          AppHeader(
+            title: 'Attendance',
+            subtitle: hasClass ? '${attProvider.selectedClassName}  •  $total students' : 'Daily class register',
+            actions: [
+              HeaderIconButton(
+                icon: Icons.refresh_rounded,
+                tooltip: 'Refresh Roster',
+                onPressed: () => _refresh(context),
+              ),
+            ],
+            bottom: hasClass
+                ? Row(
+                    children: [
+                      HeaderStat(value: '${attProvider.presentCount}', label: 'Present', dotColor: AppColors.presentGreen),
+                      HeaderStat(value: '${attProvider.absentCount}', label: 'Absent', dotColor: AppColors.absentRed),
+                      HeaderStat(value: '${attProvider.lateCount}', label: 'Late', dotColor: AppColors.lateOrange),
+                      HeaderStat(value: '${attProvider.excusedCount}', label: 'Excused', dotColor: AppColors.accentLight),
+                    ],
+                  )
+                : null,
           ),
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded, color: AppColors.textPrimary, size: 20),
-            tooltip: 'Refresh Roster',
-            onPressed: () {
-              final auth = Provider.of<AuthProvider>(context, listen: false);
-              auth.refreshProfile().then((_) {
-                final fresh = auth.currentUser;
-                attProvider.loadClasses(preferredClassId: fresh?.assignedClassId, userRole: fresh?.role, user: fresh);
-              });
-            },
+
+          if (hasClass) _buildToolbar(context, attProvider, userClasses),
+
+          Expanded(
+            child: RefreshIndicator(
+              color: AppColors.accent,
+              onRefresh: () => _refresh(context),
+              child: attProvider.isLoadingStudents || attProvider.isLoadingClasses && total == 0
+                  ? const Center(child: CircularProgressIndicator(color: AppColors.accent))
+                  : !hasClass
+                      ? const EmptyState(
+                          icon: Icons.school_outlined,
+                          title: 'No class assigned',
+                          message: 'You are not a class teacher yet. Once the Principal assigns your class, pull down to refresh and its register appears here.',
+                        )
+                      : total == 0
+                          ? const EmptyState(
+                              icon: Icons.group_off_outlined,
+                              title: 'No students enrolled',
+                              message: 'This class has no students yet. Students added by the school office appear here.',
+                            )
+                          : ListView.builder(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                              itemCount: total,
+                              itemBuilder: (context, index) => _buildStudentRow(attProvider, attProvider.students[index], index),
+                            ),
+            ),
+          ),
+
+          if (hasClass && total > 0) _buildFooter(context, attProvider, user?.fullName ?? 'Teacher', marked, total, isAllMarked),
+        ],
+      ),
+    );
+  }
+
+  // --------------------------------------------------------------- toolbar
+
+  Widget _buildToolbar(BuildContext context, AttendanceProvider attProvider, List<Map<String, dynamic>> userClasses) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(bottom: BorderSide(color: AppColors.border)),
+      ),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      child: Column(
+        children: [
+          if (userClasses.length > 1) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                color: AppColors.background,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: attProvider.selectedClassId,
+                  isExpanded: true,
+                  icon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.textSecondary),
+                  items: userClasses
+                      .map((c) => DropdownMenuItem<String>(
+                            value: c['id'],
+                            child: Text(
+                              '${c['grade']} (${c['section']})',
+                              style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.textPrimary),
+                            ),
+                          ))
+                      .toList(),
+                  onChanged: (val) {
+                    if (val != null) attProvider.setClassId(val);
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
+          Row(
+            children: [
+              Expanded(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => _pickDate(context, attProvider),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: AppColors.background,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.calendar_today_rounded, color: AppColors.accent, size: 15),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            formatDisplayDate(attProvider.selectedDate),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.inter(color: AppColors.textPrimary, fontWeight: FontWeight.w700, fontSize: 13),
+                          ),
+                        ),
+                        const Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.textMuted, size: 18),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              _buildBulkButton('All Present', AppColors.presentGreen, () => attProvider.markAll('present')),
+              const SizedBox(width: 8),
+              _buildBulkButton('All Absent', AppColors.absentRed, () => attProvider.markAll('absent')),
+            ],
           ),
         ],
       ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            // Responsive Control Panel (Class & Date & Quick Actions)
-            Container(
-              color: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      // Class Selector / Label
-                      Expanded(
-                        child: () {
-                          final userClasses = attProvider.getClassesForUser(user);
-                          if (userClasses.length > 1) {
-                            return Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12),
-                              decoration: BoxDecoration(
-                                color: AppColors.background,
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: AppColors.border),
-                              ),
-                              child: DropdownButtonHideUnderline(
-                                child: DropdownButton<String>(
-                                  value: attProvider.selectedClassId,
-                                  isExpanded: true,
-                                  hint: Text('Select Class', style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 13)),
-                                  items: userClasses.map((c) {
-                                    return DropdownMenuItem<String>(
-                                      value: c['id'],
-                                      child: Text(
-                                        '${c['grade']} (${c['section']})',
-                                        style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.textPrimary),
-                                      ),
-                                    );
-                                  }).toList(),
-                                  onChanged: (val) {
-                                    if (val != null) attProvider.setClassId(val);
-                                  },
-                                ),
-                              ),
-                            );
-                          } else {
-                            return Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                              decoration: BoxDecoration(
-                                color: AppColors.background,
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: AppColors.border),
-                              ),
-                              child: Row(
-                                children: [
-                                  const Icon(Icons.school_outlined, color: AppColors.textSecondary, size: 16),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      attProvider.selectedClassName,
-                                      style: GoogleFonts.outfit(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 14,
-                                        color: AppColors.textPrimary,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          }
-                        }(),
-                      ),
-                      const SizedBox(width: 10),
-                      // Date Selector Badge
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: AppColors.background,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: AppColors.border),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.calendar_today_rounded, color: AppColors.accent, size: 14),
-                            const SizedBox(width: 6),
-                            Text(
-                              attProvider.selectedDate,
-                              style: GoogleFonts.inter(
-                                color: AppColors.textPrimary,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
+    );
+  }
 
-                  // Quick Actions Row (All Present / All Absent)
-                  Row(
-                    children: [
-                      _buildQuickActionBtn(
-                        label: 'All Present',
-                        icon: Icons.check_circle_outline_rounded,
-                        color: AppColors.presentGreen,
-                        onTap: () => attProvider.markAll('present'),
-                      ),
-                      const SizedBox(width: 8),
-                      _buildQuickActionBtn(
-                        label: 'All Absent',
-                        icon: Icons.highlight_off_rounded,
-                        color: AppColors.absentRed,
-                        onTap: () => attProvider.markAll('absent'),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-
-            const Divider(height: 1, color: AppColors.border),
-
-            // Student Roster List
-            Expanded(
-              child: attProvider.isLoadingStudents
-                  ? const Center(child: CircularProgressIndicator())
-                  : attProvider.students.isEmpty
-                      ? Center(
-                          child: Text(
-                            attProvider.selectedClassId == null
-                                ? 'You are not assigned as a class teacher yet.\nAsk the Principal to assign your class, then tap refresh.'
-                                : 'No students enrolled in this class.',
-                            textAlign: TextAlign.center,
-                            style: GoogleFonts.inter(color: AppColors.textMuted, fontSize: 14),
-                          ),
-                        )
-                      : ListView.builder(
-                          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          itemCount: attProvider.students.length,
-                          itemBuilder: (context, index) {
-                            final student = attProvider.students[index];
-                            return GlassCard(
-                              margin: const EdgeInsets.only(bottom: 8),
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                              child: Row(
-                                children: [
-                                  CircleAvatar(
-                                    radius: 16,
-                                    backgroundColor: AppColors.background,
-                                    child: Text(
-                                      '${index + 1}',
-                                      style: GoogleFonts.outfit(
-                                        color: AppColors.textSecondary,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          student.fullName,
-                                          style: GoogleFonts.outfit(
-                                            fontSize: 15,
-                                            fontWeight: FontWeight.bold,
-                                            color: AppColors.textPrimary,
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                        Text(
-                                          student.studentNo,
-                                          style: GoogleFonts.inter(
-                                            fontSize: 11,
-                                            color: AppColors.textMuted,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-
-                                  // Minimal Status Selector Dropdown
-                                  _buildStatusDropdownSelector(context, student, attProvider),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
-            ),
-
-            // Save Attendance Footer
-            AnimatedCrossFade(
-              duration: 250.ms,
-              crossFadeState: isAllMarked ? CrossFadeState.showFirst : CrossFadeState.showSecond,
-              firstChild: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  border: Border(top: BorderSide(color: AppColors.border)),
-                ),
-                child: SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: ElevatedButton(
-                    onPressed: attProvider.isSubmitting
-                        ? null
-                        : () async {
-                            final teacherName = user?.fullName ?? 'Teacher';
-                            final ok = await attProvider.submitAttendance(teacherName);
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(attProvider.message ?? (ok ? 'Attendance saved!' : 'Attendance was not saved.')),
-                                  backgroundColor: ok ? AppColors.presentGreen : AppColors.absentRed,
-                                ),
-                              );
-                            }
-                          },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.accent,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    ),
-                    child: attProvider.isSubmitting
-                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                        : Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Icon(Icons.cloud_upload_outlined, color: Colors.white, size: 18),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Save Attendance Register',
-                                style: GoogleFonts.outfit(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ],
-                          ),
-                  ),
-                ),
-              ),
-              secondChild: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  border: Border(top: BorderSide(color: AppColors.border)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.info_outline_rounded, color: AppColors.lateOrange, size: 18),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            'Attendance Pending',
-                            style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textPrimary),
-                          ),
-                          Text(
-                            '$markedStudents of $totalStudents marked',
-                            style: GoogleFonts.inter(fontSize: 11, color: AppColors.textMuted),
-                          ),
-                        ],
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () => attProvider.markAll('present'),
-                      child: Text(
-                        'Mark All',
-                        style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.accent),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
+  Widget _buildBulkButton(String label, Color color, VoidCallback onTap) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: 0.25)),
         ),
+        child: Text(label, style: GoogleFonts.inter(color: color, fontWeight: FontWeight.w700, fontSize: 12)),
       ),
     );
   }
 
-  Widget _buildQuickActionBtn({
-    required String label,
-    required IconData icon,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return Expanded(
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.06),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: color.withValues(alpha: 0.2)),
+  // ----------------------------------------------------------- student row
+
+  Widget _buildStudentRow(AttendanceProvider attProvider, StudentModel student, int index) {
+    final current = student.attendanceStatus.toLowerCase();
+    final selected = _statusOptions.where((o) => o.value == current);
+    final rowColor = selected.isEmpty ? null : selected.first.color;
+    final initials = student.fullName
+        .split(' ')
+        .where((p) => p.isNotEmpty)
+        .take(2)
+        .map((p) => p[0].toUpperCase())
+        .join();
+
+    return AppCard(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
+      borderColor: rowColor?.withValues(alpha: 0.35),
+      child: Row(
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: (rowColor ?? AppColors.textMuted).withValues(alpha: 0.12),
+              shape: BoxShape.circle,
+            ),
+            child: Text(
+              initials.isEmpty ? '${index + 1}' : initials,
+              style: GoogleFonts.outfit(color: rowColor ?? AppColors.textSecondary, fontWeight: FontWeight.bold, fontSize: 13),
+            ),
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, color: color, size: 16),
-              const SizedBox(width: 6),
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  label,
-                  style: GoogleFonts.outfit(
-                    color: color,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  student.fullName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                ),
+                Text(
+                  student.studentNo,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(fontSize: 11, color: AppColors.textMuted),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 6),
+          ..._statusOptions.map((option) {
+            final isSelected = option.value == current;
+            return Padding(
+              padding: const EdgeInsets.only(left: 5),
+              child: Tooltip(
+                message: option.label,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => attProvider.updateStudentStatus(student.id, option.value),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    width: 34,
+                    height: 34,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: isSelected ? option.color : Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: isSelected ? option.color : AppColors.border),
+                    ),
+                    child: Text(
+                      option.short,
+                      style: GoogleFonts.outfit(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: isSelected ? Colors.white : AppColors.textSecondary,
+                      ),
+                    ),
                   ),
                 ),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------- footer
+
+  Widget _buildFooter(BuildContext context, AttendanceProvider attProvider, String teacherName, int marked, int total, bool isAllMarked) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: AppColors.border)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: total == 0 ? 0 : marked / total,
+                    minHeight: 6,
+                    backgroundColor: AppColors.border,
+                    valueColor: AlwaysStoppedAnimation(isAllMarked ? AppColors.presentGreen : AppColors.accent),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                '$marked / $total marked',
+                style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textSecondary),
               ),
             ],
           ),
-        ),
+          const SizedBox(height: 10),
+          PrimaryButton(
+            label: isAllMarked ? 'Save Attendance Register' : 'Mark all students to save',
+            icon: isAllMarked ? Icons.cloud_upload_outlined : Icons.pending_actions_outlined,
+            isBusy: attProvider.isSubmitting,
+            onPressed: isAllMarked ? () => _save(context, attProvider, teacherName) : null,
+          ),
+        ],
       ),
     );
   }
+}
 
-  Widget _buildStatusDropdownSelector(BuildContext context, StudentModel student, AttendanceProvider attProvider) {
-    Color border;
-    Color textCol;
-    String label;
+class _StatusOption {
+  final String value;
+  final String short;
+  final String label;
+  final Color color;
 
-    switch (student.attendanceStatus.toLowerCase()) {
-      case 'present':
-        border = AppColors.presentGreen;
-        textCol = AppColors.presentGreen;
-        label = 'Present';
-        break;
-      case 'absent':
-        border = AppColors.absentRed;
-        textCol = AppColors.absentRed;
-        label = 'Absent';
-        break;
-      case 'late':
-        border = AppColors.lateOrange;
-        textCol = AppColors.lateOrange;
-        label = 'Late';
-        break;
-      case 'excused':
-        border = AppColors.accent;
-        textCol = AppColors.accent;
-        label = 'Excused';
-        break;
-      default:
-        border = AppColors.border;
-        textCol = AppColors.textMuted;
-        label = 'Select';
-    }
-
-    return PopupMenuButton<String>(
-      onSelected: (val) => attProvider.updateStudentStatus(student.id, val),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      elevation: 4,
-      offset: const Offset(0, 36),
-      itemBuilder: (ctx) => [
-        _buildPopupMenuItem('present', 'Present', AppColors.presentGreen),
-        _buildPopupMenuItem('absent', 'Absent', AppColors.absentRed),
-        _buildPopupMenuItem('late', 'Late', AppColors.lateOrange),
-        _buildPopupMenuItem('excused', 'Excused', AppColors.accent),
-      ],
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: border, width: 1.0),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              label,
-              style: GoogleFonts.inter(
-                color: textCol,
-                fontWeight: FontWeight.w700,
-                fontSize: 12,
-              ),
-            ),
-            const SizedBox(width: 4),
-            Icon(Icons.keyboard_arrow_down_rounded, size: 14, color: textCol),
-          ],
-        ),
-      ),
-    );
-  }
-
-  PopupMenuItem<String> _buildPopupMenuItem(String value, String title, Color color) {
-    return PopupMenuItem<String>(
-      value: value,
-      child: Text(
-        title,
-        style: GoogleFonts.inter(color: color, fontWeight: FontWeight.bold, fontSize: 13),
-      ),
-    );
-  }
+  const _StatusOption(this.value, this.short, this.label, this.color);
 }

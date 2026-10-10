@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../constants/app_colors.dart';
+import '../models/timetable_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/attendance_provider.dart';
 import '../providers/leave_provider.dart';
 import '../providers/notification_provider.dart';
-import '../widgets/glass_card.dart';
+import '../services/api_service.dart';
+import '../widgets/app_ui.dart';
 import '../widgets/server_settings_dialog.dart';
 import 'login_screen.dart';
 import 'notifications_screen.dart';
@@ -22,15 +23,50 @@ class TeacherDashboardScreen extends StatefulWidget {
 }
 
 class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
-  void _showLogoutDialog(BuildContext context) {
+  // Bottom-bar tab indexes
+  static const int _tabAttendance = 1;
+  static const int _tabLeave = 2;
+  static const int _tabAlerts = 3;
+  static const int _tabTimetable = 4;
+
+  List<TimetableSlotModel> _todayPeriods = [];
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadDashboard());
+  }
+
+  Future<void> _loadDashboard() async {
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    await auth.refreshProfile();
+    if (!mounted) return;
+    final user = auth.currentUser;
+    final notifProvider = Provider.of<NotificationProvider>(context, listen: false);
+
+    final results = await Future.wait<dynamic>([
+      ApiService().fetchTimetable(teacherId: user?.teacherId ?? user?.id ?? ''),
+      Provider.of<AttendanceProvider>(context, listen: false)
+          .loadClasses(preferredClassId: user?.assignedClassId, userRole: user?.role, user: user),
+      Provider.of<LeaveProvider>(context, listen: false).fetchLeaveRequests(user?.fullName ?? ''),
+      notifProvider.fetchAnnouncements(),
+      notifProvider.fetchTeacherNotifications(userId: user?.id, teacherId: user?.teacherId, classId: user?.assignedClassId),
+    ]);
+
+    if (!mounted) return;
+    final slots = (results[0] as List<TimetableSlotModel>?) ?? [];
+    final today = DateTime.now().weekday;
+    setState(() {
+      _todayPeriods = slots.where((s) => s.dayOfWeek == today).toList()..sort((a, b) => a.periodNo.compareTo(b.periodNo));
+    });
+  }
+
+  void _showLogoutDialog() {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(
-          'Sign Out',
-          style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-        ),
+        title: Text('Sign Out', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
         content: Text(
           'Are you sure you want to log out of GSMS Teacher Companion?',
           style: GoogleFonts.inter(color: AppColors.textSecondary),
@@ -43,13 +79,14 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.absentRed,
+              elevation: 0,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
             onPressed: () async {
               Navigator.pop(ctx);
               final auth = Provider.of<AuthProvider>(context, listen: false);
               await auth.logout();
-              if (context.mounted) {
+              if (mounted) {
                 Navigator.of(context).pushAndRemoveUntil(
                   MaterialPageRoute(builder: (_) => const LoginScreen()),
                   (route) => false,
@@ -63,24 +100,11 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     );
   }
 
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final auth = Provider.of<AuthProvider>(context, listen: false);
-      await auth.refreshProfile();
-      if (!mounted) return;
-      final user = auth.currentUser;
-      final teacherName = user?.fullName ?? '';
-      Provider.of<AttendanceProvider>(context, listen: false).loadClasses(preferredClassId: user?.assignedClassId, userRole: user?.role, user: user);
-      Provider.of<LeaveProvider>(context, listen: false).fetchLeaveRequests(teacherName);
-      Provider.of<NotificationProvider>(context, listen: false).fetchAnnouncements();
-      Provider.of<NotificationProvider>(context, listen: false).fetchTeacherNotifications(
-        userId: user?.id,
-        teacherId: user?.teacherId,
-        classId: user?.assignedClassId,
-      );
-    });
+  String get _greeting {
+    final hour = DateTime.now().hour;
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
   }
 
   @override
@@ -89,424 +113,233 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     final attProvider = Provider.of<AttendanceProvider>(context);
     final leaveProvider = Provider.of<LeaveProvider>(context);
     final notifProvider = Provider.of<NotificationProvider>(context);
-
-    final classBadgeLabel = user?.assignedGrade != null
-        ? 'CLASS TEACHER • ${user!.assignedGrade!.toUpperCase()} ${user.assignedSection ?? ''}'
-        : 'CLASS TEACHER • GRADE 10 (A)';
-
-    final initial = user?.fullName.isNotEmpty == true ? user!.fullName[0].toUpperCase() : 'T';
+    final hasClass = user?.hasAssignedClass ?? false;
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Clean Executive Top Bar
-              Row(
+      body: Column(
+        children: [
+          _buildHeader(user?.fullName ?? 'Teacher', hasClass ? user!.assignedClassName : null, notifProvider.unreadCount),
+          Expanded(
+            child: RefreshIndicator(
+              color: AppColors.accent,
+              onRefresh: _loadDashboard,
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
                 children: [
-                  CircleAvatar(
-                    radius: 20,
-                    backgroundColor: AppColors.primary,
-                    child: Text(
-                      initial,
-                      style: GoogleFonts.outfit(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
+                  hasClass ? _buildAttendanceCard(attProvider, user!.assignedClassName) : _buildNoClassCard(),
+                  const SizedBox(height: 20),
+
+                  const SectionTitle(title: 'Quick Actions'),
+                  Row(
+                    children: [
+                      _buildQuickAction('Attendance', Icons.fact_check_outlined, AppColors.presentGreen, _tabAttendance),
+                      _buildQuickAction('Timetable', Icons.calendar_month_outlined, AppColors.accent, _tabTimetable),
+                      _buildQuickAction('Leave', Icons.event_note_outlined, AppColors.lateOrange, _tabLeave),
+                      _buildQuickAction('Alert', Icons.campaign_outlined, AppColors.absentRed, _tabAlerts),
+                    ],
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                  const SizedBox(height: 20),
+
+                  SectionTitle(
+                    title: "Today's Periods",
+                    actionLabel: 'Full timetable',
+                    onAction: () => widget.onNavigate?.call(_tabTimetable),
+                  ),
+                  if (_todayPeriods.isEmpty)
+                    AppCard(
+                      child: Row(
+                        children: [
+                          const IconTile(icon: Icons.event_available_outlined, color: AppColors.accent),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              DateTime.now().weekday > 5
+                                  ? 'No school periods today. Enjoy the weekend.'
+                                  : 'You have no teaching periods scheduled today.',
+                              style: GoogleFonts.inter(fontSize: 13, color: AppColors.textSecondary),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  else
+                    ..._todayPeriods.map(_buildPeriodRow),
+                  const SizedBox(height: 12),
+
+                  SectionTitle(
+                    title: 'My Leave',
+                    actionLabel: 'Manage',
+                    onAction: () => widget.onNavigate?.call(_tabLeave),
+                  ),
+                  AppCard(
+                    padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+                    onTap: () => widget.onNavigate?.call(_tabLeave),
+                    child: Row(
                       children: [
-                        Text(
-                          'Welcome Back',
-                          style: GoogleFonts.inter(
-                            color: AppColors.textMuted,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        Text(
-                          user?.fullName ?? 'Teacher',
-                          style: GoogleFonts.outfit(
-                            color: AppColors.textPrimary,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                        _buildLeaveFigure('${leaveProvider.pendingCount}', 'Pending', AppColors.lateOrange),
+                        _buildFigureDivider(),
+                        _buildLeaveFigure('${leaveProvider.approvedCount}', 'Approved', AppColors.presentGreen),
+                        _buildFigureDivider(),
+                        _buildLeaveFigure('${leaveProvider.rejectedCount}', 'Rejected', AppColors.absentRed),
                       ],
                     ),
                   ),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        constraints: const BoxConstraints(),
-                        padding: const EdgeInsets.all(8),
-                        icon: Stack(
-                          clipBehavior: Clip.none,
-                          children: [
-                            const Icon(
-                              Icons.notifications_none_rounded,
-                              color: AppColors.textPrimary,
-                              size: 22,
-                            ),
-                            if (notifProvider.unreadCount > 0)
-                              Positioned(
-                                top: -2,
-                                right: -2,
-                                child: Container(
-                                  padding: const EdgeInsets.all(3),
-                                  decoration: const BoxDecoration(
-                                    color: AppColors.accent,
-                                    shape: BoxShape.circle,
-                                  ),
-                                  constraints: const BoxConstraints(
-                                    minWidth: 14,
-                                    minHeight: 14,
-                                  ),
-                                  child: Text(
-                                    '${notifProvider.unreadCount}',
-                                    style: GoogleFonts.inter(
-                                      color: Colors.white,
-                                      fontSize: 8,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (_) => const NotificationsScreen()),
-                          );
-                        },
-                      ),
-                      IconButton(
-                        constraints: const BoxConstraints(),
-                        padding: const EdgeInsets.all(8),
-                        icon: const Icon(
-                          Icons.settings_outlined,
-                          color: AppColors.textPrimary,
-                          size: 22,
-                        ),
-                        onPressed: () => ServerSettingsDialog.show(context),
-                      ),
-                      IconButton(
-                        constraints: const BoxConstraints(),
-                        padding: const EdgeInsets.all(8),
-                        icon: const Icon(
-                          Icons.logout_rounded,
-                          color: AppColors.textMuted,
-                          size: 20,
-                        ),
-                        onPressed: () => _showLogoutDialog(context),
-                      ),
-                    ],
+                  const SizedBox(height: 12),
+
+                  SectionTitle(
+                    title: 'Announcements',
+                    actionLabel: notifProvider.announcements.isEmpty ? null : 'View all',
+                    onAction: () => widget.onNavigate?.call(_tabAlerts),
                   ),
-                ],
-              ).animate().fadeIn(duration: 300.ms),
-
-              const SizedBox(height: 16),
-
-              // Executive Hero Card (Slate Obsidian Theme - 100% Responsive)
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  gradient: AppColors.executiveGradient,
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: AppColors.softShadow,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        classBadgeLabel,
-                        style: GoogleFonts.inter(
-                          color: Colors.white.withValues(alpha: 0.9),
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Overall Attendance Rate',
-                                style: GoogleFonts.inter(
-                                  color: Colors.white70,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              FittedBox(
-                                fit: BoxFit.scaleDown,
-                                alignment: Alignment.centerLeft,
-                                child: Text(
-                                  '${attProvider.attendancePercentage.toStringAsFixed(0)}%',
-                                  style: GoogleFonts.outfit(
-                                    color: Colors.white,
-                                    fontSize: 38,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              ),
-                            ],
+                  if (notifProvider.isLoading && notifProvider.announcements.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.all(20),
+                      child: Center(child: CircularProgressIndicator(color: AppColors.accent)),
+                    )
+                  else if (notifProvider.announcements.isEmpty)
+                    AppCard(
+                      child: Row(
+                        children: [
+                          const IconTile(icon: Icons.campaign_outlined, color: AppColors.textMuted),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'No announcements from the school office.',
+                              style: GoogleFonts.inter(fontSize: 13, color: AppColors.textSecondary),
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 12),
-                        ElevatedButton(
-                          onPressed: () => widget.onNavigate?.call(1),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.accent,
-                            foregroundColor: Colors.white,
-                            elevation: 0,
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
+                        ],
+                      ),
+                    )
+                  else
+                    ...notifProvider.announcements.take(3).map(
+                          (item) => AppCard(
+                            onTap: () => widget.onNavigate?.call(_tabAlerts),
+                            borderColor: item.isEmergency ? AppColors.absentRed.withValues(alpha: 0.4) : null,
                             child: Row(
-                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Icon(Icons.fact_check_rounded, size: 16, color: Colors.white),
-                                const SizedBox(width: 6),
-                                Text(
-                                  'Mark Register',
-                                  style: GoogleFonts.outfit(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
-                                    color: Colors.white,
+                                IconTile(
+                                  icon: item.isEmergency ? Icons.warning_amber_rounded : Icons.campaign_outlined,
+                                  color: item.isEmergency ? AppColors.absentRed : AppColors.accent,
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        item.title,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        item.body,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: GoogleFonts.inter(fontSize: 12, height: 1.35, color: AppColors.textSecondary),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ],
                             ),
                           ),
                         ),
-                      ],
-                    ),
-                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------- header
+
+  Widget _buildHeader(String fullName, String? className, int unreadCount) {
+    final initial = fullName.isNotEmpty ? fullName[0].toUpperCase() : 'T';
+
+    return Container(
+      width: double.infinity,
+      decoration: const BoxDecoration(gradient: AppColors.executiveGradient),
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 14, 8, 18),
+          child: Row(
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: AppColors.accent,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.25), width: 2),
                 ),
-              ).animate().fadeIn(duration: 400.ms),
-
-              const SizedBox(height: 20),
-
-              // Section Header: Daily Overview
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Daily Summary',
-                    style: GoogleFonts.outfit(
-                      color: AppColors.textPrimary,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  Text(
-                    '${attProvider.totalStudents} Enrolled',
-                    style: GoogleFonts.inter(
-                      color: AppColors.textMuted,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
+                child: Text(initial, style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 19)),
               ),
-              const SizedBox(height: 10),
-
-              // 2x2 Telemetry Cards Grid (Clean Professional 2-3 Color Combo)
-              GridView.count(
-                crossAxisCount: 2,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                crossAxisSpacing: 10,
-                mainAxisSpacing: 10,
-                childAspectRatio: 1.55,
-                children: [
-                  _buildExecutiveMetricCard(
-                    title: 'Present Today',
-                    count: '${attProvider.presentCount}',
-                    percentage: attProvider.totalStudents > 0
-                        ? '${((attProvider.presentCount / attProvider.totalStudents) * 100).toStringAsFixed(0)}%'
-                        : '0%',
-                    accentColor: AppColors.presentGreen,
-                    onTap: () => widget.onNavigate?.call(1),
-                  ),
-                  _buildExecutiveMetricCard(
-                    title: 'Absent Today',
-                    count: '${attProvider.absentCount}',
-                    percentage: attProvider.totalStudents > 0
-                        ? '${((attProvider.absentCount / attProvider.totalStudents) * 100).toStringAsFixed(0)}%'
-                        : '0%',
-                    accentColor: AppColors.absentRed,
-                    onTap: () => widget.onNavigate?.call(1),
-                  ),
-                  _buildExecutiveMetricCard(
-                    title: 'Late Arrivals',
-                    count: '${attProvider.lateCount}',
-                    percentage: attProvider.totalStudents > 0
-                        ? '${((attProvider.lateCount / attProvider.totalStudents) * 100).toStringAsFixed(0)}%'
-                        : '0%',
-                    accentColor: AppColors.lateOrange,
-                    onTap: () => widget.onNavigate?.call(1),
-                  ),
-                  _buildExecutiveMetricCard(
-                    title: 'On Leave',
-                    count: '${leaveProvider.leaveRequests.where((l) => l.status == 'approved').length}',
-                    percentage: '${leaveProvider.leaveRequests.length} Total',
-                    accentColor: AppColors.accent,
-                    onTap: () => widget.onNavigate?.call(2),
-                  ),
-                ],
-              ).animate().fadeIn(delay: 150.ms),
-
-              const SizedBox(height: 16),
-
-              // Quick Actions Row (100% Responsive)
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildActionShortcut(
-                      label: 'Attendance',
-                      icon: Icons.fact_check_rounded,
-                      onTap: () => widget.onNavigate?.call(1),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _greeting,
+                      style: GoogleFonts.inter(fontSize: 12, color: Colors.white.withValues(alpha: 0.7)),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _buildActionShortcut(
-                      label: 'Apply Leave',
-                      icon: Icons.event_note_rounded,
-                      onTap: () => widget.onNavigate?.call(2),
+                    Text(
+                      fullName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.outfit(fontSize: 19, fontWeight: FontWeight.bold, color: Colors.white),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _buildActionShortcut(
-                      label: 'Send Alert',
-                      icon: Icons.campaign_rounded,
-                      onTap: () => widget.onNavigate?.call(3),
-                    ),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 20),
-
-              // School Announcements Header
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Announcements',
-                    style: GoogleFonts.outfit(
-                      color: AppColors.textPrimary,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  InkWell(
-                    onTap: () => widget.onNavigate?.call(3),
-                    child: Text(
-                      'View All',
-                      style: GoogleFonts.inter(
-                        color: AppColors.accent,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 12,
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(6),
                       ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-
-              // Announcements Feed
-              if (notifProvider.isLoading)
-                const Center(child: Padding(padding: EdgeInsets.all(20.0), child: CircularProgressIndicator()))
-              else if (notifProvider.announcements.isEmpty)
-                GlassCard(
-                  child: Center(
-                    child: Text(
-                      'No announcements posted today.',
-                      style: GoogleFonts.inter(color: AppColors.textMuted, fontSize: 13),
-                    ),
-                  ),
-                )
-              else
-                ...notifProvider.announcements.take(2).map(
-                      (item) => GlassCard(
-                        onTap: () => widget.onNavigate?.call(3),
-                        margin: const EdgeInsets.only(bottom: 8),
-                        padding: const EdgeInsets.all(12),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Icon(
-                              item.isEmergency ? Icons.warning_amber_rounded : Icons.info_outline_rounded,
-                              color: item.isEmergency ? AppColors.absentRed : AppColors.accent,
-                              size: 18,
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    item.title,
-                                    style: GoogleFonts.outfit(
-                                      color: AppColors.textPrimary,
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    item.body,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: GoogleFonts.inter(
-                                      color: AppColors.textSecondary,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
+                      child: Text(
+                        className != null ? 'CLASS TEACHER  •  ${className.toUpperCase()}' : 'SUBJECT TEACHER',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.inter(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.6,
+                          color: Colors.white.withValues(alpha: 0.9),
                         ),
                       ),
                     ),
+                  ],
+                ),
+              ),
+              HeaderIconButton(
+                icon: Icons.notifications_none_rounded,
+                tooltip: 'Notifications',
+                badgeCount: unreadCount,
+                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsScreen())),
+              ),
+              PopupMenuButton<String>(
+                tooltip: 'More',
+                icon: const Icon(Icons.more_vert_rounded, color: Colors.white, size: 22),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                onSelected: (value) {
+                  if (value == 'settings') ServerSettingsDialog.show(context);
+                  if (value == 'logout') _showLogoutDialog();
+                },
+                itemBuilder: (ctx) => [
+                  _buildMenuItem('settings', Icons.settings_outlined, 'Server settings', AppColors.textPrimary),
+                  _buildMenuItem('logout', Icons.logout_rounded, 'Sign out', AppColors.absentRed),
+                ],
+              ),
             ],
           ),
         ),
@@ -514,116 +347,273 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     );
   }
 
-  Widget _buildExecutiveMetricCard({
-    required String title,
-    required String count,
-    required String percentage,
-    required Color accentColor,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.border, width: 1.0),
-          boxShadow: AppColors.softShadow,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: accentColor,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                Text(
-                  percentage,
-                  style: GoogleFonts.inter(
-                    color: AppColors.textMuted,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    count,
-                    style: GoogleFonts.outfit(
-                      color: AppColors.textPrimary,
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
+  PopupMenuItem<String> _buildMenuItem(String value, IconData icon, String label, Color color) {
+    return PopupMenuItem<String>(
+      value: value,
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: color),
+          const SizedBox(width: 10),
+          Text(label, style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: color)),
+        ],
+      ),
+    );
+  }
+
+  // --------------------------------------------------------- attendance card
+
+  Widget _buildAttendanceCard(AttendanceProvider att, String className) {
+    final total = att.totalStudents;
+    final marked = att.presentCount + att.absentCount + att.lateCount + att.excusedCount;
+    final unmarked = total - marked;
+    final isComplete = total > 0 && unmarked == 0;
+    final rate = marked > 0 ? ((att.presentCount + att.lateCount) / marked) * 100 : 0.0;
+
+    return AppCard(
+      margin: EdgeInsets.zero,
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "TODAY'S ATTENDANCE",
+                      style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.8, color: AppColors.textMuted),
                     ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '$className  •  $total students',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: (isComplete ? AppColors.presentGreen : AppColors.lateOrange).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  total == 0 ? 'No students' : (isComplete ? 'Completed' : '$unmarked to mark'),
+                  style: GoogleFonts.inter(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: isComplete ? AppColors.presentGreen : AppColors.lateOrange,
                   ),
                 ),
-                Text(
-                  title,
-                  style: GoogleFonts.inter(
-                    color: AppColors.textSecondary,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                  ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                marked > 0 ? '${rate.toStringAsFixed(0)}%' : '—',
+                style: GoogleFonts.outfit(fontSize: 36, height: 1, fontWeight: FontWeight.w800, color: AppColors.textPrimary),
+              ),
+              const SizedBox(width: 8),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  marked > 0 ? 'in class today' : 'register not marked yet',
+                  style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: SizedBox(
+              height: 8,
+              child: total == 0
+                  ? Container(color: AppColors.border)
+                  : Row(
+                      children: [
+                        if (att.presentCount > 0) Expanded(flex: att.presentCount, child: Container(color: AppColors.presentGreen)),
+                        if (att.lateCount > 0) Expanded(flex: att.lateCount, child: Container(color: AppColors.lateOrange)),
+                        if (att.excusedCount > 0) Expanded(flex: att.excusedCount, child: Container(color: AppColors.excusedBlue)),
+                        if (att.absentCount > 0) Expanded(flex: att.absentCount, child: Container(color: AppColors.absentRed)),
+                        if (unmarked > 0) Expanded(flex: unmarked, child: Container(color: AppColors.border)),
+                      ],
+                    ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              _buildLegend('Present', att.presentCount, AppColors.presentGreen),
+              _buildLegend('Late', att.lateCount, AppColors.lateOrange),
+              _buildLegend('Excused', att.excusedCount, AppColors.excusedBlue),
+              _buildLegend('Absent', att.absentCount, AppColors.absentRed),
+            ],
+          ),
+          const SizedBox(height: 14),
+          PrimaryButton(
+            label: isComplete ? 'Review Register' : 'Mark Register',
+            icon: Icons.fact_check_outlined,
+            onPressed: () => widget.onNavigate?.call(_tabAttendance),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLegend(String label, int count, Color color) {
+    return Expanded(
+      child: Column(
+        children: [
+          Text('$count', style: GoogleFonts.outfit(fontSize: 17, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+          const SizedBox(height: 2),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(width: 6, height: 6, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+              const SizedBox(width: 4),
+              Flexible(
+                child: Text(
+                  label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w500, color: AppColors.textSecondary),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNoClassCard() {
+    return AppCard(
+      margin: EdgeInsets.zero,
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          const IconTile(icon: Icons.school_outlined, color: AppColors.accent, size: 46),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'No class register',
+                  style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'You are not assigned as a class teacher. Your teaching periods are in the Timetable tab.',
+                  style: GoogleFonts.inter(fontSize: 12, height: 1.35, color: AppColors.textSecondary),
                 ),
               ],
             ),
-          ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ------------------------------------------------------------- small parts
+
+  Widget _buildQuickAction(String label, IconData icon, Color color, int tabIndex) {
+    return Expanded(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => widget.onNavigate?.call(tabIndex),
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 4),
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 4),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.border),
+            boxShadow: AppColors.softShadow,
+          ),
+          child: Column(
+            children: [
+              IconTile(icon: icon, color: color),
+              const SizedBox(height: 8),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildActionShortcut({
-    required String label,
-    required IconData icon,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: AppColors.border, width: 1.0),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 15, color: AppColors.accent),
-            const SizedBox(width: 6),
-            Flexible(
-              child: Text(
-                label,
-                style: GoogleFonts.outfit(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
+  Widget _buildPeriodRow(TimetableSlotModel slot) {
+    return AppCard(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      onTap: () => widget.onNavigate?.call(_tabTimetable),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 54,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(slot.startTime, style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                Text(slot.endTime, style: GoogleFonts.inter(fontSize: 11, color: AppColors.textMuted)),
+              ],
             ),
-          ],
-        ),
+          ),
+          Container(width: 3, height: 34, margin: const EdgeInsets.only(right: 12), decoration: BoxDecoration(color: AppColors.accent, borderRadius: BorderRadius.circular(2))),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  slot.subjectLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  [slot.classLabel, if (slot.room.isNotEmpty) slot.room].join('  •  '),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary),
+                ),
+              ],
+            ),
+          ),
+          Text(
+            'P${slot.periodNo}',
+            style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textMuted),
+          ),
+        ],
       ),
     );
   }
+
+  Widget _buildLeaveFigure(String value, String label, Color color) {
+    return Expanded(
+      child: Column(
+        children: [
+          Text(value, style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.bold, color: color)),
+          const SizedBox(height: 2),
+          Text(label, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFigureDivider() => Container(width: 1, height: 30, color: AppColors.border);
 }

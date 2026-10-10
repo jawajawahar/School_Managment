@@ -153,17 +153,19 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: AppColors.primaryDark,
+        surfaceTintColor: Colors.transparent,
         elevation: 0,
+        flexibleSpace: Container(decoration: const BoxDecoration(gradient: AppColors.executiveGradient)),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppColors.textPrimary, size: 20),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
         title: Row(
           children: [
             Text(
               'Notifications',
-              style: GoogleFonts.outfit(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 20),
+              style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20),
             ),
             if (unreadCount > 0) ...[
               const SizedBox(width: 8),
@@ -189,10 +191,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   notifProvider.markAllAsRead(user.id);
                 }
               },
-              icon: const Icon(Icons.done_all_rounded, size: 18, color: AppColors.primary),
+              icon: const Icon(Icons.done_all_rounded, size: 18, color: Colors.white),
               label: Text(
                 'Mark Read',
-                style: GoogleFonts.inter(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 12),
+                style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
               ),
             ),
         ],
@@ -210,9 +212,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 children: [
                   _buildFilterChip('all', 'All (${allNotifs.length})'),
                   _buildFilterChip('unread', 'Unread ($unreadCount)'),
-                  _buildFilterChip('timetable', '📅 Timetables'),
-                  _buildFilterChip('at_risk', '⚠️ At-Risk Alerts'),
-                  _buildFilterChip('announcement', '📢 Notices'),
+                  _buildFilterChip('timetable', 'Timetables'),
+                  _buildFilterChip('at_risk', 'At-Risk Alerts'),
+                  _buildFilterChip('announcement', 'Notices'),
                 ],
               ),
             ),

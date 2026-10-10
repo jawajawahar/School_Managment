@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../constants/app_colors.dart';
+import '../models/announcement_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/notification_provider.dart';
-import '../widgets/glass_card.dart';
+import '../widgets/app_ui.dart';
 
 class SendAlertScreen extends StatefulWidget {
   const SendAlertScreen({super.key});
@@ -14,29 +15,42 @@ class SendAlertScreen extends StatefulWidget {
 }
 
 class _SendAlertScreenState extends State<SendAlertScreen> {
+  static const List<_AlertCategory> _categories = [
+    _AlertCategory('Emergency Alert', 'Emergency', Icons.warning_amber_rounded, AppColors.absentRed),
+    _AlertCategory('Academic Issue', 'Academic', Icons.school_outlined, AppColors.accent),
+    _AlertCategory('Facilities', 'Facilities', Icons.build_outlined, AppColors.lateOrange),
+  ];
+
   final _titleController = TextEditingController();
   final _messageController = TextEditingController();
   String _category = 'Emergency Alert';
+  int _tabIndex = 0; // 0 = announcements from the school, 1 = message the Principal
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<NotificationProvider>(context, listen: false).fetchAnnouncements();
-    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
   }
 
-  void _sendAlert() async {
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _messageController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _refresh() => Provider.of<NotificationProvider>(context, listen: false).fetchAnnouncements();
+
+  Future<void> _sendAlert() async {
     final title = _titleController.text.trim();
     final message = _messageController.text.trim();
 
     if (title.isEmpty || message.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter both title and message for the Principal.')),
-      );
+      showAppSnackBar(context, 'Please enter both a subject and a message.', isError: true);
       return;
     }
 
+    FocusManager.instance.primaryFocus?.unfocus();
     final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
     final notifProvider = Provider.of<NotificationProvider>(context, listen: false);
 
@@ -45,17 +59,17 @@ class _SendAlertScreenState extends State<SendAlertScreen> {
       message: message,
       teacherName: user?.fullName ?? 'Teacher',
     );
+    if (!mounted) return;
 
-    if (ok && mounted) {
+    if (ok) {
       _titleController.clear();
       _messageController.clear();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(notifProvider.statusMessage ?? 'Alert sent to Principal!'),
-          backgroundColor: AppColors.presentGreen,
-        ),
-      );
     }
+    showAppSnackBar(
+      context,
+      notifProvider.statusMessage ?? (ok ? 'Alert sent to Principal!' : 'Could not send alert. Please try again.'),
+      isError: !ok,
+    );
   }
 
   @override
@@ -64,263 +78,232 @@ class _SendAlertScreenState extends State<SendAlertScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: Text(
-          'Alerts & Communication',
-          style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: AppColors.textPrimary, fontSize: 18),
-        ),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        surfaceTintColor: Colors.transparent,
-        bottom: const PreferredSize(
-          preferredSize: Size.fromHeight(1),
-          child: Divider(height: 1, color: AppColors.border),
-        ),
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Alert Dispatch Form Card
-              GlassCard(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.campaign_rounded, color: AppColors.accent, size: 20),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Notify Principal Office',
-                            style: GoogleFonts.outfit(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 14),
-
-                    // Scrollable Category Pill Selector (Prevents Overflows!)
-                    Text(
-                      'Category',
-                      style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
-                    ),
-                    const SizedBox(height: 6),
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
-                          _buildCategoryPill('Emergency Alert', Icons.warning_amber_rounded, AppColors.absentRed),
-                          const SizedBox(width: 8),
-                          _buildCategoryPill('Academic Issue', Icons.school_outlined, AppColors.accent),
-                          const SizedBox(width: 8),
-                          _buildCategoryPill('Facilities', Icons.build_outlined, AppColors.lateOrange),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 14),
-
-                    // Alert Title Field
-                    Text(
-                      'Subject',
-                      style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
-                    ),
-                    const SizedBox(height: 6),
-                    TextField(
-                      controller: _titleController,
-                      style: GoogleFonts.inter(fontSize: 13),
-                      decoration: InputDecoration(
-                        hintText: 'Subject of your message...',
-                        filled: true,
-                        fillColor: AppColors.background,
-                        contentPadding: const EdgeInsets.all(12),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: AppColors.border),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: AppColors.border),
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 14),
-
-                    // Message Field
-                    Text(
-                      'Message Details',
-                      style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
-                    ),
-                    const SizedBox(height: 6),
-                    TextField(
-                      controller: _messageController,
-                      maxLines: 3,
-                      style: GoogleFonts.inter(fontSize: 13),
-                      decoration: InputDecoration(
-                        hintText: 'Enter details for Principal\'s review...',
-                        filled: true,
-                        fillColor: AppColors.background,
-                        contentPadding: const EdgeInsets.all(12),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: AppColors.border),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: AppColors.border),
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    // Dispatch Button (Responsive with FittedBox)
-                    SizedBox(
-                      width: double.infinity,
-                      height: 44,
-                      child: ElevatedButton(
-                        onPressed: notifProvider.isSending ? null : _sendAlert,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.accent,
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        ),
-                        child: notifProvider.isSending
-                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                            : FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const Icon(Icons.send_rounded, color: Colors.white, size: 16),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      'Dispatch Alert to Principal',
-                                      style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 20),
-
-              // School Broadcast Announcements
-              Text(
-                'School Announcements',
-                style: GoogleFonts.outfit(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 10),
-
-              if (notifProvider.isLoading)
-                const Center(child: CircularProgressIndicator())
-              else if (notifProvider.announcements.isEmpty)
-                GlassCard(
-                  child: Center(
-                    child: Text('No announcements posted.', style: GoogleFonts.inter(color: AppColors.textMuted, fontSize: 13)),
-                  ),
-                )
-              else
-                ...notifProvider.announcements.map(
-                  (ann) => GlassCard(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(
-                              ann.isEmergency ? Icons.warning_amber_rounded : Icons.info_outline_rounded,
-                              color: ann.isEmergency ? AppColors.absentRed : AppColors.accent,
-                              size: 16,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                ann.title,
-                                style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          ann.body,
-                          style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary),
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'By: ${ann.createdBy}',
-                              style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.accent),
-                            ),
-                            Text(
-                              ann.createdAt,
-                              style: GoogleFonts.inter(fontSize: 11, color: AppColors.textMuted),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+      body: Column(
+        children: [
+          AppHeader(
+            title: 'Alerts',
+            subtitle: 'School announcements and messages to the Principal',
+            actions: [
+              HeaderIconButton(icon: Icons.refresh_rounded, tooltip: 'Refresh', onPressed: _refresh),
             ],
+            bottom: HeaderSegmentedControl(
+              labels: const ['Announcements', 'Message Principal'],
+              icons: const [Icons.campaign_outlined, Icons.send_outlined],
+              counts: [notifProvider.announcements.length, null],
+              selectedIndex: _tabIndex,
+              onChanged: (index) => setState(() => _tabIndex = index),
+            ),
           ),
-        ),
+          Expanded(
+            child: _tabIndex == 0 ? _buildAnnouncements(notifProvider) : _buildComposer(notifProvider),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildCategoryPill(String label, IconData icon, Color color) {
-    final isSelected = _category == label;
-    return GestureDetector(
-      onTap: () => setState(() => _category = label),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: isSelected ? AppColors.accent : Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: isSelected ? AppColors.accent : AppColors.border),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 14, color: isSelected ? Colors.white : AppColors.textSecondary),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: GoogleFonts.inter(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: isSelected ? Colors.white : AppColors.textPrimary,
+  // --------------------------------------------------------- announcements
+
+  Widget _buildAnnouncements(NotificationProvider notifProvider) {
+    final items = notifProvider.announcements;
+
+    return RefreshIndicator(
+      color: AppColors.accent,
+      onRefresh: _refresh,
+      child: notifProvider.isLoading && items.isEmpty
+          ? const Center(child: CircularProgressIndicator(color: AppColors.accent))
+          : items.isEmpty
+              ? const EmptyState(
+                  icon: Icons.campaign_outlined,
+                  title: 'No announcements',
+                  message: 'Notices posted by the school office will appear here. Pull down to refresh.',
+                )
+              : ListView.builder(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                  itemCount: items.length,
+                  itemBuilder: (context, index) => _buildAnnouncementCard(items[index]),
+                ),
+    );
+  }
+
+  Widget _buildAnnouncementCard(AnnouncementModel ann) {
+    final color = ann.isEmergency ? AppColors.absentRed : AppColors.accent;
+
+    return AppCard(
+      borderColor: ann.isEmergency ? AppColors.absentRed.withValues(alpha: 0.4) : null,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              IconTile(icon: ann.isEmergency ? Icons.warning_amber_rounded : Icons.campaign_outlined, color: color),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (ann.isEmergency)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 3),
+                        child: Text(
+                          'EMERGENCY',
+                          style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 0.8, color: AppColors.absentRed),
+                        ),
+                      ),
+                    Text(
+                      ann.title,
+                      style: GoogleFonts.outfit(fontSize: 15, height: 1.2, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                    ),
+                  ],
+                ),
               ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            ann.body,
+            style: GoogleFonts.inter(fontSize: 13, height: 1.45, color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 12),
+          const Divider(height: 1, color: AppColors.border),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              const Icon(Icons.person_outline_rounded, size: 14, color: AppColors.textMuted),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  ann.createdBy,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
+                ),
+              ),
+              Text(
+                formatDisplayDate(ann.createdAt, withTime: true),
+                style: GoogleFonts.inter(fontSize: 11, color: AppColors.textMuted),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --------------------------------------------------------------- composer
+
+  Widget _buildComposer(NotificationProvider notifProvider) {
+    return SingleChildScrollView(
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+      child: AppCard(
+        margin: EdgeInsets.zero,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const IconTile(icon: Icons.campaign_rounded, color: AppColors.accent),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "Notify the Principal's Office",
+                        style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                      ),
+                      Text(
+                        'Delivered instantly to the Principal.',
+                        style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+
+            const FieldLabel('Category'),
+            Row(
+              children: _categories.map((category) {
+                final isSelected = _category == category.value;
+                return Expanded(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => setState(() => _category = category.value),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      margin: const EdgeInsets.symmetric(horizontal: 3),
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+                      decoration: BoxDecoration(
+                        color: isSelected ? category.color.withValues(alpha: 0.08) : Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: isSelected ? category.color : AppColors.border, width: isSelected ? 1.5 : 1),
+                      ),
+                      child: Column(
+                        children: [
+                          Icon(category.icon, size: 20, color: isSelected ? category.color : AppColors.textMuted),
+                          const SizedBox(height: 6),
+                          Text(
+                            category.label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: isSelected ? category.color : AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 16),
+
+            const FieldLabel('Subject'),
+            TextField(
+              controller: _titleController,
+              textCapitalization: TextCapitalization.sentences,
+              style: GoogleFonts.inter(fontSize: 13, color: AppColors.textPrimary),
+              decoration: appInputDecoration('What is this about?'),
+            ),
+            const SizedBox(height: 16),
+
+            const FieldLabel('Message'),
+            TextField(
+              controller: _messageController,
+              maxLines: 5,
+              textCapitalization: TextCapitalization.sentences,
+              style: GoogleFonts.inter(fontSize: 13, color: AppColors.textPrimary),
+              decoration: appInputDecoration("Give the details the Principal needs to act on."),
+            ),
+            const SizedBox(height: 18),
+
+            PrimaryButton(
+              label: 'Send to Principal',
+              icon: Icons.send_rounded,
+              isBusy: notifProvider.isSending,
+              onPressed: _sendAlert,
             ),
           ],
         ),
       ),
     );
   }
+}
+
+class _AlertCategory {
+  final String value;
+  final String label;
+  final IconData icon;
+  final Color color;
+
+  const _AlertCategory(this.value, this.label, this.icon, this.color);
 }
