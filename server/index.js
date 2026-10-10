@@ -3032,12 +3032,21 @@ app.get('/api/exams', async (req, res) => {
 });
 
 app.get('/api/exam-results', async (req, res) => {
+  const studentId = req.query.studentId || null;
+  const classId = req.query.classId || null;
   try {
     const { rows } = await query(
       `SELECT r.id, r.exam_id AS "examId", r.student_id AS "studentId", s.student_no AS "studentNo",
-              r.subject_id AS "subjectId", r.marks_obtained AS "marksObtained", r.grade, r.remarks
+              r.subject_id AS "subjectId", r.marks_obtained AS "marksObtained", r.grade, r.remarks,
+              sub.name AS "subjectName", e.name AS "examName", e.term AS "examTerm"
        FROM exam_results r
-       LEFT JOIN students s ON r.student_id = s.id`
+       LEFT JOIN students s ON r.student_id = s.id
+       LEFT JOIN subjects sub ON r.subject_id = sub.id
+       LEFT JOIN exams e ON r.exam_id = e.id
+       WHERE ($1::text IS NULL OR r.student_id = $1)
+         AND ($2::text IS NULL OR s.class_id = $2)
+       ORDER BY e.academic_year DESC NULLS LAST, e.term, sub.name`,
+      [studentId, classId]
     );
     res.json(rows);
   } catch (err) {

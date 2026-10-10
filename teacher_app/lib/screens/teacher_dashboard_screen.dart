@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../constants/app_colors.dart';
+import '../models/student_model.dart';
 import '../models/timetable_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/attendance_provider.dart';
@@ -9,8 +10,10 @@ import '../providers/leave_provider.dart';
 import '../providers/notification_provider.dart';
 import '../services/api_service.dart';
 import '../widgets/app_ui.dart';
+import '../widgets/guardian_contact.dart';
 import '../widgets/server_settings_dialog.dart';
 import 'login_screen.dart';
+import 'my_class_screen.dart';
 import 'notifications_screen.dart';
 
 class TeacherDashboardScreen extends StatefulWidget {
@@ -129,13 +132,16 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
                 children: [
                   hasClass ? _buildAttendanceCard(attProvider, user!.assignedClassName) : _buildNoClassCard(),
+                  if (hasClass) _buildAbsentFollowUp(attProvider.students.where((s) => s.attendanceStatus == 'absent').toList()),
                   const SizedBox(height: 20),
 
                   const SectionTitle(title: 'Quick Actions'),
                   Row(
                     children: [
                       _buildQuickAction('Attendance', Icons.fact_check_outlined, AppColors.presentGreen, _tabAttendance),
-                      _buildQuickAction('Timetable', Icons.calendar_month_outlined, AppColors.accent, _tabTimetable),
+                      hasClass
+                          ? _buildQuickAction('My Class', Icons.groups_outlined, AppColors.accent, null, onTap: _openMyClass)
+                          : _buildQuickAction('Timetable', Icons.calendar_month_outlined, AppColors.accent, _tabTimetable),
                       _buildQuickAction('Leave', Icons.event_note_outlined, AppColors.lateOrange, _tabLeave),
                       _buildQuickAction('Alert', Icons.campaign_outlined, AppColors.absentRed, _tabAlerts),
                     ],
@@ -525,11 +531,97 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
 
   // ------------------------------------------------------------- small parts
 
-  Widget _buildQuickAction(String label, IconData icon, Color color, int tabIndex) {
+  void _openMyClass({bool atRiskOnly = false}) {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => MyClassScreen(startOnAtRisk: atRiskOnly)));
+  }
+
+  /// Today's absentees with one-tap guardian calls, shown once the register has absences.
+  Widget _buildAbsentFollowUp(List<StudentModel> absentees) {
+    if (absentees.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: AppCard(
+        margin: EdgeInsets.zero,
+        padding: const EdgeInsets.fromLTRB(16, 14, 12, 8),
+        borderColor: AppColors.absentRed.withValues(alpha: 0.3),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.phone_in_talk_outlined, size: 16, color: AppColors.absentRed),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Absent today (${absentees.length})  •  follow up',
+                    style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                  ),
+                ),
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: _openMyClass,
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Text(
+                      'My class',
+                      style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.accent),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            ...absentees.take(5).map(
+                  (student) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 5),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                student.fullName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                              ),
+                              Text(
+                                student.guardianName.isEmpty
+                                    ? (student.guardianPhone.isEmpty ? 'No guardian contact on file' : student.guardianPhone)
+                                    : 'Guardian: ${student.guardianName}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.inter(fontSize: 11, color: AppColors.textMuted),
+                              ),
+                            ],
+                          ),
+                        ),
+                        CallGuardianButton(phone: student.guardianPhone),
+                      ],
+                    ),
+                  ),
+                ),
+            if (absentees.length > 5)
+              Padding(
+                padding: const EdgeInsets.only(top: 2, bottom: 6),
+                child: Text(
+                  '+ ${absentees.length - 5} more in My Class',
+                  style: GoogleFonts.inter(fontSize: 11, color: AppColors.textMuted),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuickAction(String label, IconData icon, Color color, int? tabIndex, {VoidCallback? onTap}) {
     return Expanded(
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: () => widget.onNavigate?.call(tabIndex),
+        onTap: onTap ?? () => widget.onNavigate?.call(tabIndex ?? 0),
         child: Container(
           margin: const EdgeInsets.symmetric(horizontal: 4),
           padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 4),

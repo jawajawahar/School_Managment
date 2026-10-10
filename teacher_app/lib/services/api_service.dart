@@ -8,6 +8,7 @@ import '../models/leave_model.dart';
 import '../models/announcement_model.dart';
 import '../models/timetable_model.dart';
 import '../models/app_notification_model.dart';
+import '../models/class_records.dart';
 
 class ApiService {
   final http.Client client = http.Client();
@@ -279,6 +280,37 @@ class ApiService {
       }
     } catch (e) {
       debugPrint('API Error fetching timetable: $e');
+    }
+    return null;
+  }
+
+  // 9b. Every attendance record of a class (all dates). Null when the server is unreachable.
+  Future<List<AttendanceRecord>?> fetchClassAttendance(String classId) async {
+    final url = Uri.parse('${ApiConstants.baseUrl}${ApiConstants.attendanceEndpoint}').replace(queryParameters: {'classId': classId});
+    try {
+      final response = await client.get(url, headers: headers);
+      if (response.statusCode == 200) {
+        final List list = jsonDecode(response.body);
+        return list.map((item) => AttendanceRecord.fromJson(item)).toList();
+      }
+    } catch (e) {
+      debugPrint('API Error fetching class attendance: $e');
+    }
+    return null;
+  }
+
+  // 9c. Exam marks of one student. Null when the server is unreachable.
+  Future<List<ExamResultRecord>?> fetchExamResults(String studentId) async {
+    final url = Uri.parse('${ApiConstants.baseUrl}${ApiConstants.examResultsEndpoint}').replace(queryParameters: {'studentId': studentId});
+    try {
+      final response = await client.get(url, headers: headers);
+      if (response.statusCode == 200) {
+        final List list = jsonDecode(response.body);
+        // Older servers ignore the filter and return every student.
+        return list.map((item) => ExamResultRecord.fromJson(item)).where((r) => r.studentId == studentId).toList();
+      }
+    } catch (e) {
+      debugPrint('API Error fetching exam results: $e');
     }
     return null;
   }

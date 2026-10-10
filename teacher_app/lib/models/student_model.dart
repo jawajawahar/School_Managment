@@ -5,6 +5,10 @@ class StudentModel {
   final String lastName;
   final String classId;
   final String status;
+  final String guardianName;
+  final String guardianPhone;
+  final String dateOfBirth;
+  final String admissionDate;
   String attendanceStatus; // 'present', 'absent', 'late', 'excused'
   String? remarks;
 
@@ -15,6 +19,10 @@ class StudentModel {
     required this.lastName,
     required this.classId,
     this.status = 'active',
+    this.guardianName = '',
+    this.guardianPhone = '',
+    this.dateOfBirth = '',
+    this.admissionDate = '',
     this.attendanceStatus = 'present',
     this.remarks,
   });
@@ -29,6 +37,10 @@ class StudentModel {
       lastName: json['lastName'] ?? json['last_name'] ?? '',
       classId: json['classId'] ?? json['class_id'] ?? '',
       status: json['status'] ?? 'active',
+      guardianName: json['guardianName'] ?? '',
+      guardianPhone: json['guardianPhone'] ?? json['phone'] ?? '',
+      dateOfBirth: json['dateOfBirth'] ?? '',
+      admissionDate: json['admissionDate'] ?? '',
       attendanceStatus: json['attendanceStatus'] ?? 'present',
       remarks: json['remarks'],
     );

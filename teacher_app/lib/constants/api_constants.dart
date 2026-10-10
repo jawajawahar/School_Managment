@@ -41,4 +41,5 @@ class ApiConstants {
   static const String studentsEndpoint = '/students';
   static const String teachersEndpoint = '/teachers';
   static const String timetableEndpoint = '/timetable';
+  static const String examResultsEndpoint = '/exam-results';
 }
