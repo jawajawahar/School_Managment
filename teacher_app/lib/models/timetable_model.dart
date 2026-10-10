@@ -8,6 +8,9 @@ class TimetableSlotModel {
   final String startTime;
   final String endTime;
   final String room;
+  final String? subjectName;
+  final String? className;
+  final String? teacherName;
 
   TimetableSlotModel({
     required this.id,
@@ -19,7 +22,13 @@ class TimetableSlotModel {
     required this.startTime,
     required this.endTime,
     required this.room,
+    this.subjectName,
+    this.className,
+    this.teacherName,
   });
+
+  String get subjectLabel => (subjectName != null && subjectName!.isNotEmpty) ? subjectName! : subjectId;
+  String get classLabel => (className != null && className!.isNotEmpty) ? className! : classId;
 
   factory TimetableSlotModel.fromJson(Map<String, dynamic> json) {
     return TimetableSlotModel(
@@ -29,9 +38,12 @@ class TimetableSlotModel {
       teacherId: json['teacherId'] ?? json['teacher_id'] ?? '',
       dayOfWeek: json['dayOfWeek'] ?? json['day_of_week'] ?? 1,
       periodNo: json['periodNo'] ?? json['period_no'] ?? 1,
-      startTime: json['startTime'] ?? json['start_time'] ?? '08:00 AM',
-      endTime: json['endTime'] ?? json['end_time'] ?? '08:40 AM',
-      room: json['room'] ?? 'Hall A',
+      startTime: json['startTime'] ?? json['start_time'] ?? '',
+      endTime: json['endTime'] ?? json['end_time'] ?? '',
+      room: json['room'] ?? '',
+      subjectName: json['subjectName'],
+      className: json['className'],
+      teacherName: json['teacherName'],
     );
   }
 }

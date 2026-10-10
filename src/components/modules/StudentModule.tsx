@@ -243,6 +243,11 @@ export const StudentModule: React.FC<StudentModuleProps> = ({ initialSubTab = 'd
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedClassId, setSelectedClassId] = useState<string>(activeRole === 'teacher' ? assignedClassId : 'all');
 
+  // The class assignment arrives from the server after this screen mounts.
+  useEffect(() => {
+    if (activeRole === 'teacher') setSelectedClassId(assignedClassId);
+  }, [activeRole, assignedClassId]);
+
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
   const [selectedAdmissionIds, setSelectedAdmissionIds] = useState<string[]>([]);
   const [capacityError, setCapacityError] = useState<string | null>(null);
@@ -311,7 +316,7 @@ export const StudentModule: React.FC<StudentModuleProps> = ({ initialSubTab = 'd
   const [admPrevSchool, setAdmPrevSchool] = useState('');
 
   const [examTermName, setExamTermName] = useState('2026 Term 1 Final Examinations');
-  const [examClassSelect, setExamClassSelect] = useState(assignedClassId || 'class-9a');
+  const [examClassSelect, setExamClassSelect] = useState(assignedClassId || classes[0]?.id || '');
   const [examMinAttendance, setExamMinAttendance] = useState(80);
   const [examNotes, setExamNotes] = useState('');
   const [examRosterPreview, setExamRosterPreview] = useState<NonNullable<AdmissionRequest['studentRoster']> | null>(null);
@@ -321,12 +326,20 @@ export const StudentModule: React.FC<StudentModuleProps> = ({ initialSubTab = 'd
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [dateOfBirth, setDateOfBirth] = useState('');
-  const [classId, setClassId] = useState('class-9a');
+  const [classId, setClassId] = useState(assignedClassId || classes[0]?.id || '');
   const [studentNo, setStudentNo] = useState(`GSMS-2026-${Math.floor(1000 + Math.random() * 9000)}`);
   const [guardianName, setGuardianName] = useState('');
   const [guardianPhone, setGuardianPhone] = useState('');
   const [enrolledSubjectIds, setEnrolledSubjectIds] = useState<string[]>([]);
   const [editEnrolledSubjectIds, setEditEnrolledSubjectIds] = useState<string[]>([]);
+
+  // Classes load after mount: keep the form defaults on a class that really exists.
+  useEffect(() => {
+    if (classes.length === 0) return;
+    const fallback = assignedClassId || classes[0].id;
+    if (!classes.some((c) => c.id === classId)) setClassId(fallback);
+    if (!classes.some((c) => c.id === examClassSelect)) setExamClassSelect(fallback);
+  }, [classes, assignedClassId, classId, examClassSelect]);
 
   useEffect(() => {
     if (subjects.length > 0 && enrolledSubjectIds.length === 0) {

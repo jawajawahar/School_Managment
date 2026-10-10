@@ -35,7 +35,9 @@ app.use(express.json());
 initDatabase();
 
 // Auto-initialize WhatsApp bot if existing credentials exist
-initWhatsApp().catch((err) => console.log('WhatsApp Bot standby (ready for QR scan):', err.message));
+if (process.env.WHATSAPP_AUTOSTART !== 'false') {
+  initWhatsApp().catch((err) => console.log('WhatsApp Bot standby (ready for QR scan):', err.message));
+}
 
 // Root Health Check Endpoint
 app.get('/api/health', (req, res) => {
@@ -166,15 +168,52 @@ app.get('/api/academic/pass-rate-analytics', async (req, res) => {
 // ==========================================
 // 2. AUTHENTICATION & USERS API
 // ==========================================
+// Resolves the teacher record and class-teacher assignment for a user account.
+const getTeacherProfile = async (userId) => {
+  const teacherRes = await query('SELECT id FROM teachers WHERE user_id = $1 OR id = $1 LIMIT 1', [userId]);
+  const teacherId = teacherRes.rows.length > 0 ? teacherRes.rows[0].id : null;
+  const classRes = await query(
+    `SELECT id, grade, section FROM classes
+     WHERE class_teacher_id = $1 OR class_teacher_id = $2
+     ORDER BY grade, section LIMIT 1`,
+    [teacherId, userId]
+  );
+  const cls = classRes.rows[0];
+  return {
+    teacherId,
+    assignedClassId: cls ? cls.id : null,
+    assignedGrade: cls ? cls.grade : null,
+    assignedSection: cls ? cls.section : null,
+  };
+};
+
+const toSessionUser = (user, profile) => ({
+  id: user.id,
+  teacherId: profile.teacherId || user.id,
+  schoolId: user.school_id,
+  email: user.email,
+  fullName: user.full_name,
+  role: user.role,
+  isActive: user.is_active,
+  phone: user.phone,
+  assignedClassId: profile.assignedClassId,
+  assignedGrade: profile.assignedGrade,
+  assignedSection: profile.assignedSection,
+});
+
 app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body;
   const cleanEmail = (email || '').trim().toLowerCase();
   const inputPassword = (password || '').trim();
 
+  if (!cleanEmail || !inputPassword) {
+    return res.status(400).json({ error: 'Please enter both your school email and password.' });
+  }
+
   try {
     const { rows } = await query('SELECT * FROM users WHERE LOWER(email) = LOWER($1)', [cleanEmail]);
     if (rows.length === 0) {
-      return res.status(401).json({ error: 'No registered user account found with this email. Please ask your Principal or Admin to provision your credentials.' });
+      return res.status(404).json({ error: 'No registered user account found with this email. Please ask your Principal or Admin to provision your credentials.' });
     }
 
     const user = rows[0];
@@ -182,50 +221,28 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(403).json({ error: 'This user account has been deactivated. Contact Administrator.' });
     }
 
-    if (inputPassword && user.password_hash && inputPassword !== user.password_hash.trim()) {
+    if (inputPassword !== (user.password_hash || '').trim()) {
       return res.status(401).json({ error: 'Incorrect password for this account. Access denied.' });
     }
 
-    let assignedClassId = null;
-    let assignedGrade = null;
-    let assignedSection = null;
-    let teacherId = null;
-
-    if (user.role === 'teacher') {
-      const classRes = await query(
-        `SELECT c.id, c.grade, c.section, t.id AS teacher_id
-         FROM classes c
-         LEFT JOIN teachers t ON c.class_teacher_id = t.id OR c.class_teacher_id = t.user_id
-         LEFT JOIN users u ON t.user_id = u.id
-         WHERE c.class_teacher_id = $1 OR t.user_id = $1 OR LOWER(u.email) = LOWER($2)
-         LIMIT 1`,
-        [user.id, cleanEmail]
-      );
-      if (classRes.rows.length > 0) {
-        assignedClassId = classRes.rows[0].id;
-        assignedGrade = classRes.rows[0].grade;
-        assignedSection = classRes.rows[0].section;
-        teacherId = classRes.rows[0].teacher_id;
-      }
-    }
-
+    const profile = await getTeacherProfile(user.id);
     res.json({
-      user: {
-        id: user.id,
-        teacherId: teacherId || user.id,
-        schoolId: user.school_id,
-        email: user.email,
-        fullName: user.full_name,
-        role: user.role,
-        isActive: user.is_active,
-        phone: user.phone,
-        password: user.password_hash,
-        assignedClassId,
-        assignedGrade,
-        assignedSection,
-      },
+      user: { ...toSessionUser(user, profile), password: user.password_hash },
       token: `jwt_token_${user.id}_${Date.now()}`,
     });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Lets an already signed-in client refresh its class assignment without
+// logging in again (the Principal may assign a class after the teacher's login).
+app.get('/api/auth/profile/:userId', async (req, res) => {
+  try {
+    const { rows } = await query('SELECT * FROM users WHERE id = $1', [req.params.userId]);
+    if (rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    const profile = await getTeacherProfile(rows[0].id);
+    res.json({ user: toSessionUser(rows[0], profile) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -328,9 +345,16 @@ app.post('/api/classes', async (req, res) => {
 
 app.put('/api/classes/:id/class-teacher', async (req, res) => {
   const { id } = req.params;
-  const { teacherId } = req.body;
+  const teacherId = req.body.teacherId || null;
   try {
-    await query('UPDATE classes SET class_teacher_id = $1 WHERE id = $2', [teacherId, id]);
+    if (teacherId) {
+      const teacherRes = await query('SELECT 1 FROM teachers WHERE id = $1', [teacherId]);
+      if (teacherRes.rows.length === 0) {
+        return res.status(400).json({ error: `Teacher "${teacherId}" does not exist on the server.` });
+      }
+    }
+    const { rowCount } = await query('UPDATE classes SET class_teacher_id = $1 WHERE id = $2', [teacherId, id]);
+    if (rowCount === 0) return res.status(404).json({ error: `Class "${id}" does not exist on the server.` });
     res.json({ success: true, message: `Principal assigned Class Teacher ${teacherId} to class ${id}` });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -383,8 +407,8 @@ app.get('/api/subjects', async (req, res) => {
 });
 
 app.post('/api/subjects', async (req, res) => {
-  const { code, name, gradeLevel, periodsPerWeek, syllabusUrl, category, categoryName } = req.body;
-  const id = `subj-${Date.now()}`;
+  const { id: reqId, code, name, gradeLevel, periodsPerWeek, syllabusUrl, category, categoryName } = req.body;
+  const id = reqId || `subj-${Date.now()}`;
   try {
     const { rows } = await query(
       `INSERT INTO subjects (id, code, name, grade_level, periods_per_week, syllabus_url, category, category_name)
@@ -492,9 +516,9 @@ app.get('/api/students', async (req, res) => {
         s.class_id AS "classId",
         TO_CHAR(s.admission_date, 'YYYY-MM-DD') AS "admissionDate",
         s.status,
-        COALESCE(u.phone, '') AS "phone",
-        COALESCE(u.phone, '') AS "guardianPhone",
-        '' AS "guardianName",
+        COALESCE(s.phone, s.guardian_phone, u.phone, '') AS "phone",
+        COALESCE(s.guardian_phone, s.phone, u.phone, '') AS "guardianPhone",
+        COALESCE(s.guardian_name, '') AS "guardianName",
         COALESCE(s.enrolled_subject_ids, '[]'::jsonb) AS "enrolledSubjectIds"
       FROM students s
       LEFT JOIN users u ON s.user_id = u.id
@@ -518,13 +542,19 @@ app.post('/api/students', async (req, res) => {
   const id = reqId || `stu-${Date.now()}`;
   const dob = (dateOfBirth && dateOfBirth.trim() !== '') ? dateOfBirth : '2012-01-01';
   const sno = studentNo || `GSMS-${Date.now()}`;
-  const cid = classId || 'class-9a';
+  const cid = classId || null;
   const st = status || 'active';
   const gPhone = (guardianPhone || phone || '').trim();
   const gName = (guardianName || '').trim();
   const enrolledJson = JSON.stringify(Array.isArray(enrolledSubjectIds) ? enrolledSubjectIds : []);
 
   try {
+    if (cid) {
+      const classRes = await query('SELECT 1 FROM classes WHERE id = $1', [cid]);
+      if (classRes.rows.length === 0) {
+        return res.status(400).json({ error: `Class "${cid}" does not exist on the server. Create the class first, then add the student.` });
+      }
+    }
     const { rows } = await query(
       `INSERT INTO students (id, student_no, first_name, last_name, date_of_birth, class_id, status, phone, guardian_phone, guardian_name, enrolled_subject_ids)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb)
@@ -618,20 +648,33 @@ app.post('/api/students/bulk-delete', async (req, res) => {
 });
 
 app.post('/api/students/bulk-import', async (req, res) => {
-  const { students } = req.body;
+  const students = Array.isArray(req.body.students) ? req.body.students : [];
+  const client = await pool.connect();
   try {
+    const classRes = await client.query('SELECT id FROM classes');
+    const classIds = new Set(classRes.rows.map((c) => c.id));
+    const unknownClass = students.find((s) => s.classId && !classIds.has(s.classId));
+    if (unknownClass) {
+      return res.status(400).json({ error: `Class "${unknownClass.classId}" does not exist on the server. Create the class first, then import.` });
+    }
+
+    await client.query('BEGIN');
     for (const s of students) {
       const id = s.id || `stu-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`;
-      await query(
+      await client.query(
         `INSERT INTO students (id, student_no, first_name, last_name, date_of_birth, class_id, status)
          VALUES ($1, $2, $3, $4, $5, $6, $7)
          ON CONFLICT (student_no) DO UPDATE SET first_name = EXCLUDED.first_name, last_name = EXCLUDED.last_name`,
-        [id, s.studentNo, s.firstName, s.lastName, s.dateOfBirth || '2011-01-01', s.classId || 'class-9a', s.status || 'active']
+        [id, s.studentNo || `GSMS-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`, s.firstName, s.lastName, s.dateOfBirth || '2011-01-01', s.classId || null, s.status || 'active']
       );
     }
+    await client.query('COMMIT');
     res.json({ success: true, message: `Imported ${students.length} students.` });
   } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
     res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
   }
 });
 
@@ -709,6 +752,55 @@ app.post('/api/teachers', async (req, res) => {
     res.status(500).json({ error: err.message });
   } finally {
     client.release();
+  }
+});
+
+app.put('/api/teachers/:id', async (req, res) => {
+  const { id } = req.params;
+  const { fullName, email, phone, qualification, subjectSpecialization } = req.body;
+  const cleanEmail = email ? email.trim().toLowerCase() : null;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query(
+      `UPDATE teachers
+       SET qualification = COALESCE($1, qualification),
+           subject_specialization = COALESCE($2, subject_specialization),
+           phone = COALESCE($3, phone)
+       WHERE id = $4
+       RETURNING id, user_id AS "userId", employee_no AS "employeeNo", qualification, subject_specialization AS "subjectSpecialization", phone`,
+      [qualification, subjectSpecialization, phone, id]
+    );
+    if (rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Teacher not found' });
+    }
+    await client.query(
+      `UPDATE users
+       SET full_name = COALESCE($1, full_name), email = COALESCE($2, email), phone = COALESCE($3, phone), updated_at = CURRENT_TIMESTAMP
+       WHERE id = $4`,
+      [fullName, cleanEmail, phone, rows[0].userId]
+    );
+    await client.query('COMMIT');
+    res.json(rows[0]);
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Removing the user account cascades to the teacher row, their teaching
+// assignments and timetable slots, and un-assigns them as class teacher.
+app.delete('/api/teachers/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    await query('DELETE FROM users WHERE id = (SELECT user_id FROM teachers WHERE id = $1)', [id]);
+    await query('DELETE FROM teachers WHERE id = $1', [id]);
+    res.json({ success: true, message: `Teacher ${id} deleted.` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -987,7 +1079,7 @@ app.post('/api/attendance', async (req, res) => {
   const cleanDate = (date || '').split('T')[0];
   try {
     // Resolve studentId (could be id or student_no) to actual students.id in PostgreSQL
-    let studentRes = await query(
+    const studentRes = await query(
       `SELECT id, student_no FROM students 
        WHERE id = $1 
           OR student_no = $1 
@@ -995,18 +1087,10 @@ app.post('/api/attendance', async (req, res) => {
        LIMIT 1`,
       [studentId || '', studentNo || '']
     );
-    let resolvedStudentId = studentRes.rows.length > 0 ? studentRes.rows[0].id : null;
+    const resolvedStudentId = studentRes.rows.length > 0 ? studentRes.rows[0].id : null;
 
     if (!resolvedStudentId) {
-      const stuId = studentId || `stu-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`;
-      const stuNo = studentNo || (studentId && studentId.startsWith('GSMS-') ? studentId : `GSMS-2026-${Math.floor(1000 + Math.random() * 9000)}`);
-      await query(
-        `INSERT INTO students (id, school_id, student_no, first_name, last_name, class_id, status)
-         VALUES ($1, 'sch-colombo-01', $2, 'Student', $3, 'class-10a', 'active')
-         ON CONFLICT (student_no) DO UPDATE SET first_name = EXCLUDED.first_name`,
-        [stuId, stuNo, studentId || 'Record']
-      ).catch(() => {});
-      resolvedStudentId = stuId;
+      return res.status(404).json({ error: `Student "${studentNo || studentId}" does not exist on the server.` });
     }
 
     const existingAtt = await query(
@@ -1087,7 +1171,10 @@ app.get('/api/notifications', async (req, res) => {
       FROM notifications
     `;
     const params = [];
-    const conditions = ["recipient_id = 'all'", "recipient_id = 'teacher'", "recipient_id = 'teachers'"];
+    // No filter = the web portal, which loads everything and filters per signed-in user.
+    const conditions = userId || teacherId || classId
+      ? ["recipient_id = 'all'", "recipient_id = 'teacher'", "recipient_id = 'teachers'"]
+      : [];
 
     if (userId) {
       params.push(userId);
@@ -1106,7 +1193,7 @@ app.get('/api/notifications', async (req, res) => {
       queryStr += ` WHERE ` + conditions.join(' OR ');
     }
 
-    queryStr += ` ORDER BY sent_at DESC LIMIT 100`;
+    queryStr += ` ORDER BY sent_at DESC LIMIT 300`;
 
     const { rows } = await query(queryStr, params);
     res.json(rows);
@@ -1120,11 +1207,13 @@ app.post('/api/notifications', async (req, res) => {
   if (!recipientId || !title || !message) {
     return res.status(400).json({ error: 'recipientId, title, and message are required' });
   }
-  const id = `notif-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+  // Keep the id the client generated so its local copy and this row are the same record.
+  const id = req.body.id || `notif-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
   try {
     const { rows } = await query(
       `INSERT INTO notifications (id, recipient_id, title, message, channel, category, is_read, sent_at)
        VALUES ($1, $2, $3, $4, $5, $6, false, CURRENT_TIMESTAMP)
+       ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, message = EXCLUDED.message
        RETURNING id, recipient_id AS "recipientId", title, message, channel, status, category, is_read AS "isRead", sent_at AS "sentAt"`,
       [id, recipientId, title, message, channel, category]
     );
@@ -1693,13 +1782,24 @@ app.put('/api/users/:id', async (req, res) => {
 // 11. PERMANENT TIMETABLE SLOTS API
 // ==========================================
 app.get('/api/timetable', async (req, res) => {
+  const teacherId = req.query.teacherId || null;
+  const classId = req.query.classId || null;
   try {
     const { rows } = await query(
-      `SELECT id, class_id AS "classId", subject_id AS "subjectId", teacher_id AS "teacherId",
-              day_of_week AS "dayOfWeek", period_no AS "periodNo", start_time AS "startTime",
-              end_time AS "endTime", room
-       FROM timetable_slots
-       ORDER BY class_id, day_of_week, period_no`
+      `SELECT ts.id, ts.class_id AS "classId", ts.subject_id AS "subjectId", ts.teacher_id AS "teacherId",
+              ts.day_of_week AS "dayOfWeek", ts.period_no AS "periodNo", ts.start_time AS "startTime",
+              ts.end_time AS "endTime", ts.room,
+              s.name AS "subjectName", u.full_name AS "teacherName",
+              CASE WHEN c.id IS NULL THEN NULL ELSE c.grade || ' - ' || c.section END AS "className"
+       FROM timetable_slots ts
+       LEFT JOIN subjects s ON ts.subject_id = s.id
+       LEFT JOIN classes c ON ts.class_id = c.id
+       LEFT JOIN teachers t ON ts.teacher_id = t.id
+       LEFT JOIN users u ON t.user_id = u.id
+       WHERE ($1::text IS NULL OR ts.teacher_id = $1 OR t.user_id = $1)
+         AND ($2::text IS NULL OR ts.class_id = $2)
+       ORDER BY ts.class_id, ts.day_of_week, ts.period_no`,
+      [teacherId, classId]
     );
     res.json(rows);
   } catch (err) {
@@ -1707,10 +1807,33 @@ app.get('/api/timetable', async (req, res) => {
   }
 });
 
+// Returns a human-readable reason when a slot points at a class, subject or
+// teacher the database does not have (otherwise a raw foreign-key error).
+const findMissingSlotReference = async (db, { classId, subjectId, teacherId }) => {
+  const { rows } = await db.query(
+    `SELECT EXISTS(SELECT 1 FROM classes WHERE id = $1) AS "hasClass",
+            EXISTS(SELECT 1 FROM subjects WHERE id = $2) AS "hasSubject",
+            EXISTS(SELECT 1 FROM teachers WHERE id = $3) AS "hasTeacher"`,
+    [classId || '', subjectId || '', teacherId || '']
+  );
+  if (!rows[0].hasClass) return `Class "${classId || ''}" does not exist on the server.`;
+  if (!rows[0].hasSubject) return `Subject "${subjectId || ''}" does not exist on the server. Add it under Academic > Subjects first.`;
+  if (teacherId && !rows[0].hasTeacher) return `Teacher "${teacherId}" does not exist on the server.`;
+  return null;
+};
+
 app.post('/api/timetable', async (req, res) => {
-  const { id, classId, subjectId, teacherId, dayOfWeek, periodNo, startTime, endTime, room } = req.body;
+  const { id, classId, subjectId, dayOfWeek, periodNo, startTime, endTime } = req.body;
+  const teacherId = req.body.teacherId || null;
+  const room = String(req.body.room || '').trim() || 'Classroom';
   const slotId = id || `slot-${Date.now()}`;
+  if (!classId || !subjectId || !dayOfWeek || !periodNo) {
+    return res.status(400).json({ error: 'classId, subjectId, dayOfWeek and periodNo are required.' });
+  }
   try {
+    const missing = await findMissingSlotReference({ query }, { classId, subjectId, teacherId });
+    if (missing) return res.status(400).json({ error: missing });
+
     // 1. Check for Teacher Schedule Conflict across different classes
     if (teacherId) {
       const clashRes = await query(
@@ -1719,9 +1842,9 @@ app.post('/api/timetable', async (req, res) => {
          JOIN classes c ON ts.class_id = c.id
          LEFT JOIN teachers t ON ts.teacher_id = t.id
          LEFT JOIN users u ON t.user_id = u.id
-         WHERE ts.teacher_id = $1 
-           AND ts.day_of_week = $2 
-           AND ts.period_no = $3 
+         WHERE ts.teacher_id = $1
+           AND ts.day_of_week = $2
+           AND ts.period_no = $3
            AND ts.class_id != $4`,
         [teacherId, dayOfWeek, periodNo, classId]
       );
@@ -1736,7 +1859,7 @@ app.post('/api/timetable', async (req, res) => {
     }
 
     // 2. Check for Room Conflict across different classes
-    if (room && String(room).trim() !== '') {
+    {
       const roomClashRes = await query(
         `SELECT ts.*, c.grade, c.section
          FROM timetable_slots ts
@@ -1745,12 +1868,12 @@ app.post('/api/timetable', async (req, res) => {
            AND ts.day_of_week = $2
            AND ts.period_no = $3
            AND ts.class_id != $4`,
-        [room.trim(), dayOfWeek, periodNo, classId]
+        [room, dayOfWeek, periodNo, classId]
       );
       if (roomClashRes.rows.length > 0) {
         const clash = roomClashRes.rows[0];
         return res.status(409).json({
-          error: `Room Conflict: Classroom/Hall "${room.trim()}" is already in use by ${clash.grade} (${clash.section}) during Period ${periodNo} on this day.`
+          error: `Room Conflict: Classroom/Hall "${room}" is already in use by ${clash.grade} (${clash.section}) during Period ${periodNo} on this day.`
         });
       }
     }
@@ -1759,12 +1882,12 @@ app.post('/api/timetable', async (req, res) => {
       `INSERT INTO timetable_slots (id, class_id, subject_id, teacher_id, day_of_week, period_no, start_time, end_time, room)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        ON CONFLICT (class_id, day_of_week, period_no)
-       DO UPDATE SET subject_id = EXCLUDED.subject_id, teacher_id = EXCLUDED.teacher_id,
+       DO UPDATE SET id = EXCLUDED.id, subject_id = EXCLUDED.subject_id, teacher_id = EXCLUDED.teacher_id,
                      room = EXCLUDED.room, start_time = EXCLUDED.start_time, end_time = EXCLUDED.end_time
        RETURNING id, class_id AS "classId", subject_id AS "subjectId", teacher_id AS "teacherId",
                  day_of_week AS "dayOfWeek", period_no AS "periodNo", start_time AS "startTime",
                  end_time AS "endTime", room`,
-      [slotId, classId, subjectId, teacherId, dayOfWeek, periodNo, startTime, endTime, room]
+      [slotId, classId, subjectId, teacherId, dayOfWeek, periodNo, startTime || '', endTime || '', room]
     );
     res.status(201).json(rows[0]);
   } catch (err) {
@@ -1772,20 +1895,34 @@ app.post('/api/timetable', async (req, res) => {
   }
 });
 
+// Replaces a class's whole weekly timetable in one transaction (used by
+// auto-generate and by "copy timetable from another class").
 app.post('/api/timetable/auto-generate', async (req, res) => {
-  const { classId, slots } = req.body;
+  const { classId } = req.body;
+  const slots = Array.isArray(req.body.slots) ? req.body.slots : [];
+  if (!classId) return res.status(400).json({ error: 'classId is required.' });
+  const client = await pool.connect();
   try {
-    await query('DELETE FROM timetable_slots WHERE class_id = $1', [classId]);
     for (const slot of slots) {
-      await query(
+      const missing = await findMissingSlotReference(client, { classId, subjectId: slot.subjectId, teacherId: slot.teacherId });
+      if (missing) return res.status(400).json({ error: missing });
+    }
+    await client.query('BEGIN');
+    await client.query('DELETE FROM timetable_slots WHERE class_id = $1', [classId]);
+    for (const slot of slots) {
+      await client.query(
         `INSERT INTO timetable_slots (id, class_id, subject_id, teacher_id, day_of_week, period_no, start_time, end_time, room)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-        [slot.id, slot.classId, slot.subjectId, slot.teacherId, slot.dayOfWeek, slot.periodNo, slot.startTime, slot.endTime, slot.room]
+        [slot.id, classId, slot.subjectId, slot.teacherId || null, slot.dayOfWeek, slot.periodNo, slot.startTime || '', slot.endTime || '', String(slot.room || '').trim() || 'Classroom']
       );
     }
+    await client.query('COMMIT');
     res.json({ success: true, count: slots.length });
   } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
     res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
   }
 });
 
@@ -3010,6 +3147,20 @@ app.post('/api/admin/clear-attendance', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// Unknown API routes answer in JSON, never with the web portal's HTML.
+app.use('/api', (req, res) => {
+  res.status(404).json({ error: `No API route for ${req.method} ${req.originalUrl}` });
+});
+
+// Single-container deployment: serve the built web portal from this server
+// so the browser and the API share one origin.
+const webDistDir = process.env.WEB_DIST_DIR ? path.resolve(process.env.WEB_DIST_DIR) : null;
+if (webDistDir && fs.existsSync(path.join(webDistDir, 'index.html'))) {
+  app.use(express.static(webDistDir));
+  app.get('*', (req, res) => res.sendFile(path.join(webDistDir, 'index.html')));
+  console.log(`🌐 Serving web portal from ${webDistDir}`);
+}
 
 // Start Express Server
 app.listen(PORT, () => {

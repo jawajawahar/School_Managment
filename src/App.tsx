@@ -18,6 +18,33 @@ import { NotificationModule } from './components/modules/NotificationModule';
 import { ReportsModule } from './components/modules/ReportsModule';
 import { UserManagementModule } from './components/modules/UserManagementModule';
 
+// Tells the user when the server refused a change or cannot be reached, so
+// nothing that failed to save ever looks saved.
+const SyncStatusBanner: React.FC = () => {
+  const { syncError, dismissSyncError, backendOffline } = useData();
+  if (!syncError && !backendOffline) return null;
+
+  return (
+    <div className="fixed bottom-4 right-4 z-[100] max-w-sm space-y-2 text-xs">
+      {backendOffline && (
+        <div className="px-4 py-3 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 shadow-lg">
+          <strong>School server unreachable.</strong> You are seeing the last data saved on this device; new changes will not be saved until the connection returns.
+        </div>
+      )}
+      {syncError && (
+        <div className="px-4 py-3 rounded-xl bg-rose-50 border border-rose-300 text-rose-900 shadow-lg flex items-start gap-3">
+          <div className="flex-1">
+            <strong>Not saved on the server.</strong> {syncError}
+          </div>
+          <button type="button" onClick={dismissSyncError} className="font-bold cursor-pointer" aria-label="Dismiss">
+            ✕
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const AppContent: React.FC = () => {
   const { isAuthenticated, hasAccessToModule } = useData();
   const [activeTab, setActiveTab] = useState<ModuleTab>('dashboard');
@@ -109,6 +136,7 @@ export function App() {
   return (
     <DataProvider>
       <AppContent />
+      <SyncStatusBanner />
     </DataProvider>
   );
 }

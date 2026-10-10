@@ -30,6 +30,7 @@ class ApiConstants {
 
   // Auth
   static const String loginEndpoint = '/auth/login';
+  static const String profileEndpoint = '/auth/profile';
 
   // Core Features
   static const String attendanceEndpoint = '/attendance';

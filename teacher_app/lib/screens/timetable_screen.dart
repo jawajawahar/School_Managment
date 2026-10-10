@@ -18,30 +18,80 @@ class _TimetableScreenState extends State<TimetableScreen> {
   int _selectedDay = 1; // 1 = Monday, 5 = Friday
   List<TimetableSlotModel> _slots = [];
   bool _isLoading = true;
+  bool _loadFailed = false;
+  // A class teacher can switch between their class's timetable and the periods they teach.
+  bool _showMyClass = false;
 
   final List<String> _days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
 
   @override
   void initState() {
     super.initState();
+    final weekday = DateTime.now().weekday;
+    if (weekday <= 5) _selectedDay = weekday;
+    _showMyClass = Provider.of<AuthProvider>(context, listen: false).currentUser?.hasAssignedClass ?? false;
     _fetchSchedule();
   }
 
-  void _fetchSchedule() async {
-    final teacherId = Provider.of<AuthProvider>(context, listen: false).currentUser?.id ?? '';
-    final apiService = ApiService();
-    final data = await apiService.fetchTimetable(teacherId);
+  Future<void> _fetchSchedule() async {
+    if (!_isLoading) setState(() => _isLoading = true);
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    await auth.refreshProfile();
+    final user = auth.currentUser;
+    final showClass = _showMyClass && (user?.hasAssignedClass ?? false);
+    final data = showClass
+        ? await ApiService().fetchTimetable(classId: user!.assignedClassId)
+        : await ApiService().fetchTimetable(teacherId: user?.teacherId ?? user?.id ?? '');
     if (mounted) {
       setState(() {
-        _slots = data;
+        _showMyClass = showClass;
+        _slots = data ?? [];
+        _loadFailed = data == null;
         _isLoading = false;
       });
     }
   }
 
+  void _setView(bool showMyClass) {
+    if (_showMyClass == showMyClass) return;
+    _showMyClass = showMyClass;
+    _fetchSchedule();
+  }
+
+  Widget _viewTab(String label, bool showMyClass) {
+    final isSelected = _showMyClass == showMyClass;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => _setView(showMyClass),
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 2),
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+          decoration: BoxDecoration(
+            color: isSelected ? AppColors.primary : AppColors.background,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: isSelected ? AppColors.primary : AppColors.border),
+          ),
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.inter(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: isSelected ? Colors.white : AppColors.textSecondary,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final filteredSlots = _slots.where((s) => s.dayOfWeek == _selectedDay).toList();
+    final user = context.watch<AuthProvider>().currentUser;
+    final filteredSlots = _slots.where((s) => s.dayOfWeek == _selectedDay).toList()
+      ..sort((a, b) => a.periodNo.compareTo(b.periodNo));
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -53,6 +103,13 @@ class _TimetableScreenState extends State<TimetableScreen> {
         backgroundColor: Colors.white,
         elevation: 0,
         surfaceTintColor: Colors.transparent,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded, color: AppColors.textPrimary, size: 20),
+            tooltip: 'Refresh Timetable',
+            onPressed: _fetchSchedule,
+          ),
+        ],
         bottom: const PreferredSize(
           preferredSize: Size.fromHeight(1),
           child: Divider(height: 1, color: AppColors.border),
@@ -61,6 +118,18 @@ class _TimetableScreenState extends State<TimetableScreen> {
       body: SafeArea(
         child: Column(
           children: [
+            if (user?.hasAssignedClass ?? false)
+              Container(
+                color: Colors.white,
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+                child: Row(
+                  children: [
+                    _viewTab('My Class: ${user!.assignedClassName}', true),
+                    _viewTab('My Teaching Periods', false),
+                  ],
+                ),
+              ),
+
             // Day Selector Tabs (Responsive Row)
             Container(
               color: Colors.white,
@@ -113,7 +182,10 @@ class _TimetableScreenState extends State<TimetableScreen> {
                               const Icon(Icons.event_seat_outlined, size: 40, color: AppColors.textMuted),
                               const SizedBox(height: 8),
                               Text(
-                                'No periods scheduled for ${_days[_selectedDay - 1]}',
+                                _loadFailed
+                                    ? 'Could not load the timetable.\nCheck your connection and tap refresh.'
+                                    : 'No periods scheduled for ${_days[_selectedDay - 1]}',
+                                textAlign: TextAlign.center,
                                 style: GoogleFonts.inter(color: AppColors.textMuted, fontSize: 13),
                               ),
                             ],
@@ -162,7 +234,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         Text(
-                                          slot.subjectId,
+                                          slot.subjectLabel,
                                           style: GoogleFonts.outfit(
                                             fontSize: 15,
                                             fontWeight: FontWeight.bold,
@@ -174,9 +246,13 @@ class _TimetableScreenState extends State<TimetableScreen> {
                                         const SizedBox(height: 2),
                                         Row(
                                           children: [
-                                            Text(
-                                              'Class: ${slot.classId}',
-                                              style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+                                            Flexible(
+                                              child: Text(
+                                                _showMyClass ? (slot.teacherName ?? 'Teacher not set') : slot.classLabel,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+                                              ),
                                             ),
                                             const SizedBox(width: 10),
                                             Text(

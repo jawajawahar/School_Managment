@@ -11,24 +11,21 @@ export const LoginForm: React.FC = () => {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleFormSubmit = (e: React.FormEvent) => {
+  const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    if (!email.trim() || !password.trim()) {
+      setError('Please enter both your assigned school email and password.');
+      return;
+    }
+
     setIsLoading(true);
-
-    setTimeout(() => {
-      if (!email.trim() || !password.trim()) {
-        setError('Please enter both your assigned school email and password.');
-        setIsLoading(false);
-        return;
-      }
-
-      const res = login(email, password);
-      if (!res.success && res.error) {
-        setError(res.error);
-        setIsLoading(false);
-      }
-    }, 250);
+    const res = await login(email, password);
+    if (!res.success) {
+      setError(res.error || 'Sign in failed. Please try again.');
+      setIsLoading(false);
+    }
   };
 
   return (

@@ -56,7 +56,7 @@ class LeaveProvider extends ChangeNotifier {
       return true;
     } catch (e) {
       _isSubmitting = false;
-      _message = 'Submission failed: ${e.toString()}';
+      _message = e.toString().replaceAll('Exception: ', '');
       notifyListeners();
       return false;
     }

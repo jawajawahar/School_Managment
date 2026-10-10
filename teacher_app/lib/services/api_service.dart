@@ -21,23 +21,39 @@ class ApiService {
   // 1. Teacher Authentication Login
   Future<UserModel> login(String email, String password) async {
     final url = Uri.parse('${ApiConstants.baseUrl}${ApiConstants.loginEndpoint}');
+    final http.Response response;
     try {
-      final response = await client.post(
-        url,
-        headers: headers,
-        body: jsonEncode({'email': email, 'password': password}),
-      );
+      // The hosted server can take up to a minute to wake after being idle.
+      response = await client
+          .post(url, headers: headers, body: jsonEncode({'email': email, 'password': password}))
+          .timeout(const Duration(seconds: 75));
+    } catch (_) {
+      throw Exception('Cannot reach the school server. Check your internet connection and try again.');
+    }
 
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return UserModel.fromJson(data['user'], token: data['token']);
+    }
+    String message = 'Login failed. Please check your credentials.';
+    try {
+      message = jsonDecode(response.body)['error'] ?? message;
+    } catch (_) {}
+    throw Exception(message);
+  }
+
+  // 1b. Refresh the signed-in teacher's class assignment (null when the server is unreachable)
+  Future<UserModel?> fetchProfile(String userId) async {
+    final url = Uri.parse('${ApiConstants.baseUrl}${ApiConstants.profileEndpoint}/$userId');
+    try {
+      final response = await client.get(url, headers: headers);
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return UserModel.fromJson(data['user'], token: data['token']);
-      } else {
-        final err = jsonDecode(response.body);
-        throw Exception(err['error'] ?? 'Login failed. Please check your credentials.');
+        return UserModel.fromJson(jsonDecode(response.body)['user']);
       }
     } catch (e) {
-      rethrow;
+      debugPrint('API Error fetching profile: $e');
     }
+    return null;
   }
 
   // 2. Fetch Classes List
@@ -119,6 +135,7 @@ class ApiService {
   }
 
   // 4. Batch Submit Daily Attendance Register
+  /// Returns true only when the server accepted every student's record.
   Future<bool> submitAttendance({
     required String date,
     required String markedBy,
@@ -127,7 +144,7 @@ class ApiService {
     final url = Uri.parse('${ApiConstants.baseUrl}${ApiConstants.attendanceEndpoint}');
     try {
       for (var student in studentList) {
-        await client.post(
+        final response = await client.post(
           url,
           headers: headers,
           body: jsonEncode({
@@ -139,51 +156,39 @@ class ApiService {
             'remarks': student.remarks ?? '',
           }),
         );
+        if (response.statusCode != 200 && response.statusCode != 201) {
+          debugPrint('Attendance rejected for ${student.studentNo}: ${response.body}');
+          return false;
+        }
       }
       return true;
     } catch (e) {
-      // Mock success for offline mode
-      return true;
+      debugPrint('API Error submitting attendance: $e');
+      return false;
     }
   }
 
-  // 5. Fetch Leave Requests
+  // 5. Fetch this teacher's own Leave Requests
   Future<List<LeaveModel>> fetchLeaveRequests(String teacherName) async {
     final url = Uri.parse('${ApiConstants.baseUrl}${ApiConstants.leaveRequestsEndpoint}');
     try {
       final response = await client.get(url, headers: headers);
       if (response.statusCode == 200) {
         final List list = jsonDecode(response.body);
-        return list.map((item) => LeaveModel.fromJson(item)).toList();
+        final mine = teacherName.trim().toLowerCase();
+        return list
+            .map((item) => LeaveModel.fromJson(item))
+            .where((leave) => leave.applicantName.trim().toLowerCase() == mine)
+            .toList();
       }
-    } catch (_) {}
-
-    // Fallback Mock Leave Requests
-    return [
-      LeaveModel(
-        id: 'lvr-01',
-        applicantName: teacherName.isEmpty ? 'Teacher' : teacherName,
-        role: 'teacher',
-        type: 'Sick Leave',
-        startDate: '2026-10-12',
-        endDate: '2026-10-13',
-        reason: 'Medical checkup and recovery',
-        status: 'pending',
-      ),
-      LeaveModel(
-        id: 'lvr-02',
-        applicantName: teacherName.isEmpty ? 'Teacher' : teacherName,
-        role: 'teacher',
-        type: 'Casual Leave',
-        startDate: '2026-09-15',
-        endDate: '2026-09-15',
-        reason: 'Family urgent affair',
-        status: 'approved',
-      ),
-    ];
+    } catch (e) {
+      debugPrint('API Error fetching leave requests: $e');
+    }
+    return [];
   }
 
   // 6. Submit Leave Request
+  /// Throws when the server did not record the request.
   Future<LeaveModel> submitLeaveRequest({
     required String applicantName,
     required String type,
@@ -201,29 +206,16 @@ class ApiService {
       'reason': reason,
     };
 
+    final http.Response response;
     try {
-      final response = await client.post(
-        url,
-        headers: headers,
-        body: jsonEncode(payload),
-      );
-
-      if (response.statusCode == 201 || response.statusCode == 200) {
-        return LeaveModel.fromJson(jsonDecode(response.body));
-      }
-    } catch (_) {}
-
-    // Mock response fallback
-    return LeaveModel(
-      id: 'lvr-${DateTime.now().millisecondsSinceEpoch}',
-      applicantName: applicantName,
-      role: 'teacher',
-      type: type,
-      startDate: startDate,
-      endDate: endDate,
-      reason: reason,
-      status: 'pending',
-    );
+      response = await client.post(url, headers: headers, body: jsonEncode(payload));
+    } catch (_) {
+      throw Exception('Cannot reach the school server. Your leave request was not sent.');
+    }
+    if (response.statusCode == 201 || response.statusCode == 200) {
+      return LeaveModel.fromJson(jsonDecode(response.body));
+    }
+    throw Exception('The server did not accept the leave request (${response.statusCode}).');
   }
 
   // 7. Fetch School Announcements
@@ -265,28 +257,30 @@ class ApiService {
       );
       return response.statusCode == 201 || response.statusCode == 200;
     } catch (e) {
-      return true;
+      debugPrint('API Error sending alert: $e');
+      return false;
     }
   }
 
   // 9. Fetch Timetable
-  Future<List<TimetableSlotModel>> fetchTimetable(String teacherId) async {
-    final url = Uri.parse('${ApiConstants.baseUrl}${ApiConstants.timetableEndpoint}');
+  /// Pass [teacherId] for the periods a teacher teaches, or [classId] for a
+  /// class's full weekly timetable. Returns null when the server is unreachable.
+  Future<List<TimetableSlotModel>?> fetchTimetable({String? teacherId, String? classId}) async {
+    final query = <String, String>{
+      if (teacherId != null && teacherId.isNotEmpty) 'teacherId': teacherId,
+      if (classId != null && classId.isNotEmpty) 'classId': classId,
+    };
+    final url = Uri.parse('${ApiConstants.baseUrl}${ApiConstants.timetableEndpoint}').replace(queryParameters: query.isEmpty ? null : query);
     try {
       final response = await client.get(url, headers: headers);
       if (response.statusCode == 200) {
         final List list = jsonDecode(response.body);
         return list.map((item) => TimetableSlotModel.fromJson(item)).toList();
       }
-    } catch (_) {}
-
-    // Fallback Timetable slots
-    return [
-      TimetableSlotModel(id: 'ts-1', classId: 'Grade 10-A', subjectId: 'Mathematics', teacherId: teacherId, dayOfWeek: 1, periodNo: 1, startTime: '08:00 AM', endTime: '08:40 AM', room: 'Hall 3'),
-      TimetableSlotModel(id: 'ts-2', classId: 'Grade 9-B', subjectId: 'Science', teacherId: teacherId, dayOfWeek: 1, periodNo: 3, startTime: '09:20 AM', endTime: '10:00 AM', room: 'Lab 1'),
-      TimetableSlotModel(id: 'ts-3', classId: 'Grade 11-A', subjectId: 'Mathematics', teacherId: teacherId, dayOfWeek: 2, periodNo: 2, startTime: '08:40 AM', endTime: '09:20 AM', room: 'Hall 5'),
-      TimetableSlotModel(id: 'ts-4', classId: 'Grade 10-A', subjectId: 'Mathematics', teacherId: teacherId, dayOfWeek: 3, periodNo: 4, startTime: '10:20 AM', endTime: '11:00 AM', room: 'Hall 3'),
-    ];
+    } catch (e) {
+      debugPrint('API Error fetching timetable: $e');
+    }
+    return null;
   }
 
   // 10. Fetch Notifications (Targeted to Teacher)

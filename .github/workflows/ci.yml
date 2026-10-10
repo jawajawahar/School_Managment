@@ -1,0 +1,67 @@
+name: CI
+
+# Runs on every push: proves the web portal, the API image and the teacher
+# app still build, and produces an installable Android APK.
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+  pull_request:
+
+jobs:
+  web-and-api:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Type-check and Build Web Portal
+        run: |
+          npm ci
+          npm run build
+
+      - name: Check API Server Syntax
+        run: |
+          cd server
+          npm ci
+          for f in *.js; do node --check "$f"; done
+
+      - name: Build Docker Image
+        run: docker build -t gsms:ci .
+
+  android-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Analyze and Build Android APK
+        run: |
+          cd teacher_app
+          flutter pub get
+          flutter analyze
+          flutter build apk --release
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: GSMS_Teacher_App_APK
+          path: teacher_app/build/app/outputs/flutter-apk/app-release.apk

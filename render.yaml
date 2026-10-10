@@ -1,0 +1,23 @@
+# Render Blueprint: one Docker web service that serves both the API and the
+# web portal, redeployed automatically on every push to main.
+#
+# Render > New > Blueprint > pick this repository. Then set DATABASE_URL to
+# your Render PostgreSQL "Internal Database URL" when prompted.
+services:
+  - type: web
+    name: school-management
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    autoDeploy: true
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: DB_SSL
+        value: "false"
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        sync: false
+      - key: WHATSAPP_ACCESS_TOKEN
+        sync: false

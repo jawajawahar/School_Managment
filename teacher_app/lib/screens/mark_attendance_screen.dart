@@ -48,7 +48,11 @@ class MarkAttendanceScreen extends StatelessWidget {
             icon: const Icon(Icons.refresh_rounded, color: AppColors.textPrimary, size: 20),
             tooltip: 'Refresh Roster',
             onPressed: () {
-              attProvider.loadClasses(preferredClassId: user?.assignedClassId, userRole: user?.role, user: user);
+              final auth = Provider.of<AuthProvider>(context, listen: false);
+              auth.refreshProfile().then((_) {
+                final fresh = auth.currentUser;
+                attProvider.loadClasses(preferredClassId: fresh?.assignedClassId, userRole: fresh?.role, user: fresh);
+              });
             },
           ),
         ],
@@ -85,7 +89,7 @@ class MarkAttendanceScreen extends StatelessWidget {
                                     return DropdownMenuItem<String>(
                                       value: c['id'],
                                       child: Text(
-                                        'Grade ${c['grade']} (${c['section']})',
+                                        '${c['grade']} (${c['section']})',
                                         style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.textPrimary),
                                       ),
                                     );
@@ -186,7 +190,10 @@ class MarkAttendanceScreen extends StatelessWidget {
                   : attProvider.students.isEmpty
                       ? Center(
                           child: Text(
-                            'No students enrolled in this class.',
+                            attProvider.selectedClassId == null
+                                ? 'You are not assigned as a class teacher yet.\nAsk the Principal to assign your class, then tap refresh.'
+                                : 'No students enrolled in this class.',
+                            textAlign: TextAlign.center,
                             style: GoogleFonts.inter(color: AppColors.textMuted, fontSize: 14),
                           ),
                         )
@@ -268,11 +275,11 @@ class MarkAttendanceScreen extends StatelessWidget {
                         : () async {
                             final teacherName = user?.fullName ?? 'Teacher';
                             final ok = await attProvider.submitAttendance(teacherName);
-                            if (ok && context.mounted) {
+                            if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  content: Text(attProvider.message ?? 'Attendance saved!'),
-                                  backgroundColor: AppColors.presentGreen,
+                                  content: Text(attProvider.message ?? (ok ? 'Attendance saved!' : 'Attendance was not saved.')),
+                                  backgroundColor: ok ? AppColors.presentGreen : AppColors.absentRed,
                                 ),
                               );
                             }

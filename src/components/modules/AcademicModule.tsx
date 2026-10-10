@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { GraduationCap, BookOpen, Layers, Plus, UserCheck, Shield, Crown, BookCheck, Phone, Mail, AlertTriangle, Calendar, ChevronLeft, ChevronRight, Pencil, Trash2, Save, X, LayoutGrid, List } from 'lucide-react';
 import { useData } from '../../context/DataContext';
 import { CustomSelect } from '../common/CustomSelect';
@@ -41,7 +41,14 @@ export const AcademicModule: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<AcademicTab>('overview');
   const [overviewViewMode, setOverviewViewMode] = useState<'table' | 'cards'>('table');
-  const [selectedClassId, setSelectedClassId] = useState<string>(assignedClassId || 'class-9a');
+  const [selectedClassId, setSelectedClassId] = useState<string>(assignedClassId || classes[0]?.id || '');
+
+  // Classes load after mount: keep the selection on a class that really exists.
+  useEffect(() => {
+    if (classes.length > 0 && !classes.some((c) => c.id === selectedClassId)) {
+      setSelectedClassId(assignedClassId || classes[0].id);
+    }
+  }, [classes, assignedClassId, selectedClassId]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [viewingTimetableClassId, setViewingTimetableClassId] = useState<string | null>(null);
   const [teacherMeterPage, setTeacherMeterPage] = useState<number>(1);

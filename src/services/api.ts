@@ -24,7 +24,37 @@ import {
   Notification,
 } from '../types';
 
-const API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:5000/api';
+// A production build with no explicit API URL talks to the server that served
+// it (single-container deployment); only `npm run dev` assumes a local backend.
+const viteEnv = (import.meta as any).env || {};
+const API_BASE_URL: string = viteEnv.VITE_API_BASE_URL || (viteEnv.DEV ? 'http://localhost:5000/api' : '/api');
+
+export class ApiError extends Error {
+  status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+  }
+}
+
+// Every request in this file goes through here, so a rejected write (4xx/5xx)
+// throws with the server's own reason instead of looking like a success.
+const fetch = async (input: string, init?: RequestInit): Promise<Response> => {
+  const res = await globalThis.fetch(input, init);
+  if (!res.ok) {
+    let message = `Server responded with ${res.status}`;
+    try {
+      const body = await res.clone().json();
+      if (body?.error) message = body.error;
+    } catch {
+      // non-JSON error body: keep the status message
+    }
+    throw new ApiError(res.status, message);
+  }
+  return res;
+};
 
 /**
  * GSMS Backend REST API Integration Service Layer
@@ -52,14 +82,12 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
     });
-    if (!res.ok) throw new Error('Authentication failed');
     return res.json();
   },
 
   // Students API
   async getStudents(): Promise<Student[]> {
     const res = await fetch(`${API_BASE_URL}/students`);
-    if (!res.ok) return [];
     return res.json();
   },
 
@@ -114,7 +142,6 @@ export const api = {
   // Teachers & Staff API
   async getTeachers(): Promise<Teacher[]> {
     const res = await fetch(`${API_BASE_URL}/teachers`);
-    if (!res.ok) return [];
     return res.json();
   },
 
@@ -137,6 +164,22 @@ export const api = {
     return res.json();
   },
 
+  async updateTeacher(
+    id: string,
+    teacherData: { fullName?: string; email?: string; phone?: string; qualification?: string; subjectSpecialization?: string }
+  ): Promise<Teacher> {
+    const res = await fetch(`${API_BASE_URL}/teachers/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(teacherData),
+    });
+    return res.json();
+  },
+
+  async deleteTeacher(id: string): Promise<void> {
+    await fetch(`${API_BASE_URL}/teachers/${id}`, { method: 'DELETE' });
+  },
+
   async assignClassTeacher(classId: string, teacherId: string): Promise<void> {
     await fetch(`${API_BASE_URL}/classes/${classId}/class-teacher`, {
       method: 'PUT',
@@ -147,7 +190,6 @@ export const api = {
 
   async getTeachingAssignments(): Promise<TeachingAssignment[]> {
     const res = await fetch(`${API_BASE_URL}/teaching-assignments`);
-    if (!res.ok) return [];
     return res.json();
   },
 
@@ -163,7 +205,6 @@ export const api = {
   // Classes & Academic Structure API
   async getClasses(): Promise<Class[]> {
     const res = await fetch(`${API_BASE_URL}/classes`);
-    if (!res.ok) return [];
     return res.json();
   },
 
@@ -191,7 +232,6 @@ export const api = {
 
   async getSubjects(): Promise<Subject[]> {
     const res = await fetch(`${API_BASE_URL}/subjects`);
-    if (!res.ok) return [];
     return res.json();
   },
 
@@ -223,13 +263,11 @@ export const api = {
   async getAttendance(date: string, classId?: string): Promise<Attendance[]> {
     const query = new URLSearchParams({ date, ...(classId ? { classId } : {}) });
     const res = await fetch(`${API_BASE_URL}/attendance?${query.toString()}`);
-    if (!res.ok) return [];
     return res.json();
   },
 
   async getAllAttendance(): Promise<Attendance[]> {
     const res = await fetch(`${API_BASE_URL}/attendance`);
-    if (!res.ok) return [];
     return res.json();
   },
 
@@ -244,7 +282,6 @@ export const api = {
   // Principal Leave & Approval Workflows API
   async getLeaveRequests(): Promise<LeaveRequest[]> {
     const res = await fetch(`${API_BASE_URL}/leave-requests`);
-    if (!res.ok) return [];
     return res.json();
   },
 
@@ -258,7 +295,6 @@ export const api = {
 
   async getAdmissionRequests(): Promise<AdmissionRequest[]> {
     const res = await fetch(`${API_BASE_URL}/admission-requests`);
-    if (!res.ok) return [];
     return res.json();
   },
 
@@ -302,7 +338,6 @@ export const api = {
 
   async getPurchaseDisposalRequests(): Promise<PurchaseDisposalRequest[]> {
     const res = await fetch(`${API_BASE_URL}/purchase-disposal-requests`);
-    if (!res.ok) return [];
     return res.json();
   },
 
@@ -326,7 +361,6 @@ export const api = {
   // Announcements API
   async getAnnouncements(): Promise<Announcement[]> {
     const res = await fetch(`${API_BASE_URL}/announcements`);
-    if (!res.ok) return [];
     return res.json();
   },
 
@@ -346,7 +380,6 @@ export const api = {
   // Security Audit Logs API
   async getAuditLogs(): Promise<AuditLog[]> {
     const res = await fetch(`${API_BASE_URL}/audit-logs`);
-    if (!res.ok) return [];
     return res.json();
   },
 
@@ -371,7 +404,6 @@ export const api = {
   // Staff API
   async getStaff(): Promise<Staff[]> {
     const res = await fetch(`${API_BASE_URL}/staff`);
-    if (!res.ok) return [];
     return res.json();
   },
 
@@ -387,7 +419,6 @@ export const api = {
   // Users API
   async getUsers(): Promise<User[]> {
     const res = await fetch(`${API_BASE_URL}/users`);
-    if (!res.ok) return [];
     return res.json();
   },
 
@@ -412,7 +443,6 @@ export const api = {
   // Library API
   async getLibraryItems(): Promise<LibraryItem[]> {
     const res = await fetch(`${API_BASE_URL}/library-items`);
-    if (!res.ok) return [];
     return res.json();
   },
 
@@ -440,7 +470,6 @@ export const api = {
 
   async getLibraryTransactions(): Promise<LibraryTransaction[]> {
     const res = await fetch(`${API_BASE_URL}/library-transactions`);
-    if (!res.ok) return [];
     return res.json();
   },
 
@@ -464,7 +493,6 @@ export const api = {
   // Inventory API
   async getInventoryItems(): Promise<InventoryItem[]> {
     const res = await fetch(`${API_BASE_URL}/inventory-items`);
-    if (!res.ok) return [];
     return res.json();
   },
 
@@ -537,7 +565,6 @@ export const api = {
   // Welfare API
   async getWelfarePrograms(): Promise<WelfareProgram[]> {
     const res = await fetch(`${API_BASE_URL}/welfare-programs`);
-    if (!res.ok) return [];
     return res.json();
   },
 
@@ -556,7 +583,6 @@ export const api = {
 
   async getWelfareEnrolments(): Promise<WelfareEnrolment[]> {
     const res = await fetch(`${API_BASE_URL}/welfare-enrolments`);
-    if (!res.ok) return [];
     return res.json();
   },
 
@@ -576,7 +602,6 @@ export const api = {
   // Permanent Timetable API
   async getTimetableSlots(): Promise<TimetableSlot[]> {
     const res = await fetch(`${API_BASE_URL}/timetable`);
-    if (!res.ok) return [];
     return res.json();
   },
 

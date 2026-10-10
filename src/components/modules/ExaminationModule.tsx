@@ -16,8 +16,19 @@ export const ExaminationModule: React.FC = () => {
   const { classes, students, subjects, teachers, users, exams, examResults, saveExamResult, currentUser, assignedClassId, schoolProfile } = useData();
 
   const [selectedExamId, setSelectedExamId] = useState<string>('exam-term1-2026');
-  const [selectedClassId, setSelectedClassId] = useState<string>(currentUser?.role === 'teacher' ? assignedClassId : 'class-9a');
+  const [selectedClassId, setSelectedClassId] = useState<string>(currentUser?.role === 'teacher' ? assignedClassId : classes[0]?.id || '');
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>('subj-math');
+
+  // Classes, subjects and the class assignment load after mount: keep the
+  // selections on records that really exist.
+  useEffect(() => {
+    if (currentUser?.role === 'teacher') {
+      if (selectedClassId !== assignedClassId) setSelectedClassId(assignedClassId);
+    } else if (classes.length > 0 && !classes.some((c) => c.id === selectedClassId)) {
+      setSelectedClassId(classes[0].id);
+    }
+    if (subjects.length > 0 && !subjects.some((s) => s.id === selectedSubjectId)) setSelectedSubjectId(subjects[0].id);
+  }, [currentUser?.role, assignedClassId, classes, subjects, selectedClassId, selectedSubjectId]);
 
   const [marksPage, setMarksPage] = useState<number>(1);
 

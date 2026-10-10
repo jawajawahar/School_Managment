@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { api } from '../services/api';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import { api, ApiError } from '../services/api';
 import {
   User,
   UserRole,
@@ -79,7 +79,10 @@ interface DataContextType {
   isAuthenticated: boolean;
   currentUser: User | null;
   activeRole: UserRole;
-  login: (email: string, password?: string) => { success: boolean; error?: string };
+  login: (email: string, password?: string) => Promise<{ success: boolean; error?: string }>;
+  syncError: string | null;
+  dismissSyncError: () => void;
+  backendOffline: boolean;
   logout: () => void;
   hasAccessToModule: (moduleName: string) => boolean;
 
@@ -128,7 +131,7 @@ interface DataContextType {
   deleteTimetableSlot: (id: string) => void;
   clearClassTimetable: (classId: string) => void;
   clearTeacherTimetable: (teacherId: string) => void;
-  autoGenerateClassTimetable: (classId: string) => void;
+  autoGenerateClassTimetable: (classId: string) => { success: boolean; error?: string };
   copyClassTimetable: (sourceClassId: string, targetClassId: string) => void;
 
   saveExamResult: (examId: string, studentId: string, subjectId: string, marks: number, maxMarks: number) => void;
@@ -211,6 +214,134 @@ const DataContext = createContext<DataContextType | undefined>(undefined);
 const LOCAL_STORAGE_KEY = 'gsms_app_state_v4';
 const AUTH_SESSION_KEY = 'gsms_auth_user_id_v2';
 const PASSWORDS_MAP_KEY = 'gsms_user_passwords_v2';
+// Set once this browser's locally-cached records have been uploaded to the server.
+const LOCAL_PUSH_DONE_KEY = 'gsms_local_push_done_v1';
+const FULL_SYNC_INTERVAL_MS = 60000;
+
+const fetchBackendSnapshot = async () => {
+  const [
+    users, classes, subjects, teachers, students, teachingAssignments, timetableSlots, exams, examResults,
+    attendance, leaveRequests, admissionRequests, purchaseDisposalRequests, announcements, staff,
+    libraryItems, libraryTransactions, inventoryItems, welfarePrograms, welfareEnrolments, auditLogs, notifications,
+  ] = await Promise.all([
+    api.getUsers(), api.getClasses(), api.getSubjects(), api.getTeachers(), api.getStudents(),
+    api.getTeachingAssignments(), api.getTimetableSlots(), api.getExams(), api.getExamResults(),
+    api.getAllAttendance(), api.getLeaveRequests(), api.getAdmissionRequests(), api.getPurchaseDisposalRequests(),
+    api.getAnnouncements(), api.getStaff(), api.getLibraryItems(), api.getLibraryTransactions(),
+    api.getInventoryItems(), api.getWelfarePrograms(), api.getWelfareEnrolments(), api.getAuditLogs(),
+    api.getNotifications(),
+  ]);
+  return {
+    users, classes, subjects, teachers, students, teachingAssignments, timetableSlots, exams, examResults,
+    attendance, leaveRequests, admissionRequests, purchaseDisposalRequests, announcements, staff,
+    libraryItems, libraryTransactions, inventoryItems, welfarePrograms, welfareEnrolments, auditLogs, notifications,
+  };
+};
+
+type BackendSnapshot = Awaited<ReturnType<typeof fetchBackendSnapshot>>;
+
+// Earlier versions kept a record in this browser even when the server
+// rejected it, so a browser can hold classes, teachers, students and
+// timetable slots the database never received. Upload those once, in
+// foreign-key order; after that the server is the single source of truth.
+const pushLocalOnlyRecords = async (local: any, backend: BackendSnapshot): Promise<number> => {
+  let pushed = 0;
+  const upload = async (send: () => Promise<unknown>) => {
+    try {
+      await send();
+      pushed++;
+    } catch (err) {
+      console.warn('Local record could not be uploaded:', err);
+    }
+  };
+  const list = (v: any): any[] => (Array.isArray(v) ? v : []);
+  const savedPasswords = getStoredPasswordMap();
+
+  // A principal who changed the bootstrap password before the account existed on the server
+  for (const bu of backend.users) {
+    const saved = savedPasswords[(bu.email || '').trim().toLowerCase()];
+    if (bu.role === 'principal' && bu.password === 'ChangeMe123!' && saved && saved !== bu.password) {
+      await upload(() => api.updateUserAccount(bu.id, { password: saved }));
+    }
+  }
+
+  const classIds = new Set(backend.classes.map((c) => c.id));
+  const newClassIds = new Set<string>();
+  for (const c of list(local.classes)) {
+    if (!c?.id || classIds.has(c.id)) continue;
+    await upload(async () => {
+      await api.createClass({ id: c.id, grade: c.grade, section: c.section, academicYear: c.academicYear, capacity: c.capacity });
+      newClassIds.add(c.id);
+    });
+  }
+
+  const teacherIds = new Set(backend.teachers.map((t) => t.id));
+  for (const t of list(local.teachers)) {
+    if (!t?.id || teacherIds.has(t.id)) continue;
+    const user = list(local.users).find((u: User) => u.id === t.userId);
+    if (!user?.email) continue;
+    await upload(async () => {
+      await api.createTeacher({
+        id: t.id,
+        userId: t.userId,
+        fullName: user.fullName,
+        email: user.email,
+        password: savedPasswords[user.email.trim().toLowerCase()] || user.password,
+        phone: t.phone || user.phone,
+        qualification: t.qualification,
+        subjectSpecialization: t.subjectSpecialization,
+        employeeNo: t.employeeNo,
+      });
+      teacherIds.add(t.id);
+    });
+  }
+
+  const subjectIds = new Set(backend.subjects.map((sub) => sub.id));
+  const subjectCodes = new Set(backend.subjects.map((sub) => sub.code));
+  for (const sub of list(local.subjects)) {
+    if (!sub?.id || subjectIds.has(sub.id) || subjectCodes.has(sub.code)) continue;
+    await upload(async () => {
+      await api.createSubject(sub);
+      subjectIds.add(sub.id);
+    });
+  }
+
+  for (const c of list(local.classes)) {
+    if (!c?.classTeacherId) continue;
+    const onServer = backend.classes.find((bc) => bc.id === c.id);
+    if (!(newClassIds.has(c.id) || (onServer && !onServer.classTeacherId))) continue;
+    const teacher = list(local.teachers).find(
+      (t: Teacher) => t.id === c.classTeacherId || t.userId === c.classTeacherId || t.employeeNo === c.classTeacherId
+    );
+    if (teacher && teacherIds.has(teacher.id)) {
+      await upload(() => api.assignClassTeacher(c.id, teacher.id));
+    }
+  }
+
+  const studentKeys = new Set<string>();
+  backend.students.forEach((st) => {
+    studentKeys.add(st.id);
+    if (st.studentNo) studentKeys.add(st.studentNo);
+  });
+  for (const st of list(local.students)) {
+    if (!st?.id || studentKeys.has(st.id) || (st.studentNo && studentKeys.has(st.studentNo))) continue;
+    await upload(() => api.createStudent(st));
+  }
+
+  const assignmentKeys = new Set(backend.teachingAssignments.map((a) => `${a.classId}|${a.subjectId}`));
+  for (const a of list(local.teachingAssignments)) {
+    if (!a?.classId || assignmentKeys.has(`${a.classId}|${a.subjectId}`)) continue;
+    await upload(() => api.assignSubjectTeacher(a.classId, a.subjectId, a.teacherId));
+  }
+
+  const slotKeys = new Set(backend.timetableSlots.map((sl) => `${sl.classId}|${sl.dayOfWeek}|${sl.periodNo}`));
+  for (const sl of list(local.timetableSlots)) {
+    if (!sl?.classId || slotKeys.has(`${sl.classId}|${sl.dayOfWeek}|${sl.periodNo}`)) continue;
+    await upload(() => api.saveTimetableSlot(sl));
+  }
+
+  return pushed;
+};
 
 const getStoredPasswordMap = (): Record<string, string> => {
   try {
@@ -339,6 +470,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const [store, setStore] = useState(getInitialStore);
+  const storeRef = useRef(store);
+  storeRef.current = store;
+
+  // A change the server refused. Shown to the user: the local copy of that
+  // change is discarded at the next sync, so it must not look saved.
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [backendOffline, setBackendOffline] = useState(false);
+  const dismissSyncError = () => setSyncError(null);
+  const syncFail = (label: string) => (err: any) => {
+    console.warn(label, err);
+    const action = label.replace(/^Backend (API )?/, '').replace(/ (sync )?(error|notice):?$/, '');
+    setSyncError(`${action}: ${err?.message || 'the server did not accept this change'}`);
+  };
+  const syncNowRef = useRef<() => Promise<void>>(async () => {});
 
   const [currentUserId, setCurrentUserId] = useState<string | null>(() => {
     return localStorage.getItem(AUTH_SESSION_KEY) || null;
@@ -356,32 +501,43 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [store]);
 
-  // Load Classes & Subjects from Express PostgreSQL Backend Server
+  // Load everything from the Express PostgreSQL Backend Server and keep it fresh
   useEffect(() => {
+    let syncInFlight = false;
     async function syncBackendData() {
+      if (syncInFlight) return;
+      syncInFlight = true;
       try {
-        const backendUsers = await api.getUsers();
-        const backendClasses = await api.getClasses();
-        const backendSubjects = await api.getSubjects();
-        const backendTeachers = await api.getTeachers();
-        const backendStudents = await api.getStudents();
-        const backendAssignments = await api.getTeachingAssignments();
-        const backendTimetable = await api.getTimetableSlots();
-        const backendExams = await api.getExams();
-        const backendExamResults = await api.getExamResults();
-        const backendAttendance = await api.getAllAttendance();
-        const backendLeaves = await api.getLeaveRequests();
-        const backendAdmissions = await api.getAdmissionRequests();
-        const backendPurchases = await api.getPurchaseDisposalRequests();
-        const backendAnnouncements = await api.getAnnouncements();
-        const backendStaff = await api.getStaff();
-        const backendLibraryItems = await api.getLibraryItems();
-        const backendLibraryTransactions = await api.getLibraryTransactions();
-        const backendInventoryItems = await api.getInventoryItems();
-        const backendWelfarePrograms = await api.getWelfarePrograms();
-        const backendWelfareEnrolments = await api.getWelfareEnrolments();
-        const backendAuditLogs = await api.getAuditLogs();
-        const backendNotifications = await api.getNotifications();
+        let backend = await fetchBackendSnapshot();
+        if (!localStorage.getItem(LOCAL_PUSH_DONE_KEY)) {
+          const pushed = await pushLocalOnlyRecords(storeRef.current, backend);
+          localStorage.setItem(LOCAL_PUSH_DONE_KEY, new Date().toISOString());
+          if (pushed > 0) backend = await fetchBackendSnapshot();
+        }
+        const {
+          users: backendUsers,
+          classes: backendClasses,
+          subjects: backendSubjects,
+          teachers: backendTeachers,
+          students: backendStudents,
+          teachingAssignments: backendAssignments,
+          timetableSlots: backendTimetable,
+          exams: backendExams,
+          examResults: backendExamResults,
+          attendance: backendAttendance,
+          leaveRequests: backendLeaves,
+          admissionRequests: backendAdmissions,
+          purchaseDisposalRequests: backendPurchases,
+          announcements: backendAnnouncements,
+          staff: backendStaff,
+          libraryItems: backendLibraryItems,
+          libraryTransactions: backendLibraryTransactions,
+          inventoryItems: backendInventoryItems,
+          welfarePrograms: backendWelfarePrograms,
+          welfareEnrolments: backendWelfareEnrolments,
+          auditLogs: backendAuditLogs,
+          notifications: backendNotifications,
+        } = backend;
 
         setStore((prev: any) => {
           const persistentPasswords = getStoredPasswordMap();
@@ -421,12 +577,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             mergedUsers = Array.from(userMap.values());
           }
 
-          const mergedClasses = Array.isArray(backendClasses)
-            ? backendClasses.map((bk: Class) => {
-                const local = (prev.classes || []).find((c: Class) => c.id === bk.id);
-                return local && local.classTeacherId ? { ...bk, classTeacherId: local.classTeacherId } : bk;
-              })
-            : (prev.classes || INITIAL_CLASSES);
+          // The server owns class-teacher assignments: a stale local value must
+          // never mask what the Principal set from another device.
+          const mergedClasses = Array.isArray(backendClasses) ? backendClasses : (prev.classes || INITIAL_CLASSES);
 
           let mergedNotifications = prev.notifications || [];
           if (Array.isArray(backendNotifications)) {
@@ -442,21 +595,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             );
           }
 
-          // Merge backend students with local students first so canonical lookup works
-          let mergedStudents = prev.students || INITIAL_STUDENTS;
-          if (Array.isArray(backendStudents) && backendStudents.length > 0) {
-            const stuMap = new Map<string, Student>();
-            (prev.students || []).forEach((s: Student) => {
-              if (s && s.id) stuMap.set(s.id, s);
-              if (s && s.studentNo) stuMap.set(s.studentNo, s);
-            });
-            backendStudents.forEach((bs: Student) => {
-              if (bs && bs.id && !stuMap.has(bs.id) && (!bs.studentNo || !stuMap.has(bs.studentNo))) {
-                stuMap.set(bs.id, bs);
-              }
-            });
-            mergedStudents = Array.from(new Set(stuMap.values()));
-          }
+          const mergedStudents: Student[] = Array.isArray(backendStudents) ? backendStudents : (prev.students || INITIAL_STUDENTS);
 
           // Merge backend attendance using canonical student keys
           let mergedAttendance = prev.attendance || [];
@@ -521,12 +660,21 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             auditLogs: Array.isArray(backendAuditLogs) ? backendAuditLogs : (prev.auditLogs || []),
           };
         });
-
+        setBackendOffline(false);
       } catch (err) {
         console.warn('Backend API Sync Notice:', err);
+        setBackendOffline(true);
+      } finally {
+        syncInFlight = false;
       }
     }
+    syncNowRef.current = syncBackendData;
     syncBackendData();
+
+    // Timetable, class and student changes made on another device arrive here.
+    const fullSyncInterval = setInterval(syncBackendData, FULL_SYNC_INTERVAL_MS);
+    const handleWindowFocus = () => { syncBackendData(); };
+    window.addEventListener('focus', handleWindowFocus);
 
     // Background polling for notifications, announcements & real-time attendance sync across sessions
     const pollInterval = setInterval(async () => {
@@ -645,96 +793,89 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     return () => {
       clearInterval(pollInterval);
+      clearInterval(fullSyncInterval);
+      window.removeEventListener('focus', handleWindowFocus);
       window.removeEventListener('storage', handleStorageChange);
     };
   }, []);
 
-  const login = (email: string, password?: string) => {
+  const login = async (email: string, password?: string) => {
     const cleanEmail = email.trim().toLowerCase();
+    const inputPassword = (password || '').trim();
     if (!cleanEmail) {
       return { success: false, error: 'Please enter a valid school email address.' };
     }
-
-    const currentStoreUsers = (store.users && store.users.length > 0) ? store.users : INITIAL_USERS;
-    const foundUser = currentStoreUsers.find((u: User) => u.email && u.email.trim().toLowerCase() === cleanEmail)
-      || INITIAL_USERS.find((u: User) => u.email && u.email.trim().toLowerCase() === cleanEmail);
-
-    if (!foundUser) {
-      return {
-        success: false,
-        error: 'No registered user account found with this email. Please ask your Principal or Admin to provision your credentials.',
-      };
-    }
-
-    if (!foundUser.isActive) {
-      return { success: false, error: 'This user account has been deactivated. Contact Administrator.' };
-    }
-
-    const persistentPasswords = getStoredPasswordMap();
-    const overridePassword = persistentPasswords[cleanEmail];
-    const userPass = foundUser.password ? foundUser.password.trim() : '';
-    const storedPass = overridePassword ? overridePassword.trim() : '';
-    const defaultPass = 'password123';
-    const inputPassword = (password || '').trim();
-
     if (!inputPassword) {
       return { success: false, error: 'Please enter your account password.' };
     }
 
-    let isPasswordValid = false;
-    if (storedPass && storedPass !== defaultPass && inputPassword === storedPass) {
-      isPasswordValid = true;
-    } else if (userPass && userPass !== defaultPass && inputPassword === userPass) {
-      isPasswordValid = true;
-    } else if (storedPass && inputPassword === storedPass) {
-      isPasswordValid = true;
-    } else if (userPass && inputPassword === userPass) {
-      isPasswordValid = true;
-    } else if (inputPassword === defaultPass) {
-      isPasswordValid = true;
-    } else if (inputPassword !== defaultPass) {
-      // User entered their custom password assigned by Principal (e.g. GSMS@2571 or GSMS@2026).
-      // Accept custom password and update persistent cache & PostgreSQL DB immediately!
-      isPasswordValid = true;
+    const localUser: User | null =
+      [...(store.users || []), ...INITIAL_USERS].find((u: User) => u.email && u.email.trim().toLowerCase() === cleanEmail) || null;
+    // The password this browser last signed in with (or provisioned) for this account
+    const savedPassword = (getStoredPasswordMap()[cleanEmail] || '').trim();
+    let sessionUser: User | null = null;
+
+    try {
+      let result;
+      try {
+        result = await api.login(cleanEmail, inputPassword);
+      } catch (firstErr) {
+        // The one-time upload of this browser's records may not have reached the server yet.
+        const uploadPending = !localStorage.getItem(LOCAL_PUSH_DONE_KEY);
+        if (!(firstErr instanceof ApiError) || !uploadPending || inputPassword !== savedPassword) throw firstErr;
+        await syncNowRef.current();
+        result = await api.login(cleanEmail, inputPassword);
+      }
+      sessionUser = { ...(localUser || {}), ...result.user } as User;
+    } catch (err: any) {
+      const status = err instanceof ApiError ? err.status : 0;
+      if (status === 404 && localUser && savedPassword && inputPassword === savedPassword) {
+        // An account provisioned in this browser that never reached the server.
+        sessionUser = localUser;
+        api.createUser({ ...localUser, password: inputPassword }).catch(syncFail('Backend createUser error:'));
+      } else if (status >= 400 && status < 500) {
+        return { success: false, error: err.message };
+      } else {
+        // Server unreachable: fall back to the credentials cached on this device.
+        const cachedPassword = savedPassword || (localUser?.password || '').trim();
+        if (!localUser || !cachedPassword || inputPassword !== cachedPassword) {
+          return { success: false, error: 'Cannot reach the school server to verify this account. Check your connection and try again.' };
+        }
+        if (!localUser.isActive) {
+          return { success: false, error: 'This user account has been deactivated. Contact Administrator.' };
+        }
+        sessionUser = localUser;
+      }
     }
 
-    if (!isPasswordValid) {
-      return { success: false, error: 'Incorrect password for this account. Access denied.' };
-    }
-
-    // Persist verified active password in local storage & React state
+    const signedIn: User = { ...sessionUser, password: inputPassword };
     storePasswordForEmail(cleanEmail, inputPassword);
-    foundUser.password = inputPassword;
-
-    setStore((prev: any) => ({
-      ...prev,
-      users: (prev.users || []).map((u: User) =>
-        u.email && u.email.trim().toLowerCase() === cleanEmail ? { ...u, password: inputPassword } : u
-      ),
-    }));
-
-    if (foundUser.id) {
-      api.updateUserAccount(foundUser.id, { password: inputPassword, email: cleanEmail }).catch(() => {});
-    }
-
-    setCurrentUserId(foundUser.id);
-    localStorage.setItem(AUTH_SESSION_KEY, foundUser.id);
 
     const newLog: AuditLog = {
       id: `audit-${Date.now()}`,
-      actorId: foundUser.id,
-      actorName: foundUser.fullName,
+      actorId: signedIn.id,
+      actorName: signedIn.fullName,
       action: 'LOGIN',
       entity: 'Session',
-      entityId: foundUser.id,
-      details: `User logged in with role [${foundUser.role}]`,
+      entityId: signedIn.id,
+      details: `User logged in with role [${signedIn.role}]`,
       timestamp: new Date().toISOString(),
     };
 
     setStore((prev: any) => ({
       ...prev,
+      users: [
+        signedIn,
+        ...(prev.users || []).filter(
+          (u: User) => u.id !== signedIn.id && (u.email || '').trim().toLowerCase() !== cleanEmail
+        ),
+      ],
       auditLogs: [newLog, ...(prev.auditLogs || [])],
     }));
+
+    setCurrentUserId(signedIn.id);
+    localStorage.setItem(AUTH_SESSION_KEY, signedIn.id);
+    syncNowRef.current();
 
     return { success: true };
   };
@@ -901,7 +1042,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       notifications: [teacherNotif, ...(prev.notifications || [])],
     }));
 
-    api.createStudent(newStudent).catch((err) => console.warn('Backend createStudent error:', err));
+    api.createStudent(newStudent).catch(syncFail('Backend createStudent error:'));
     logAudit('CREATE', 'Student', id, `Registered student ${newStudent.firstName} ${newStudent.lastName} (${newStudent.status})`);
   };
 
@@ -929,7 +1070,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
     });
 
-    api.updateStudent(studentId, { status: 'active' }).catch((err) => console.warn('Backend updateStudent error:', err));
+    api.updateStudent(studentId, { status: 'active' }).catch(syncFail('Backend updateStudent error:'));
     logAudit('APPROVE', 'Student', studentId, `Class Teacher accepted student into active class roster`);
   };
 
@@ -938,7 +1079,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ...prev,
       students: (prev.students || []).map((s: Student) => (s.id === student.id ? student : s)),
     }));
-    api.updateStudent(student.id, student).catch((err) => console.warn('Backend updateStudent error:', err));
+    api.updateStudent(student.id, student).catch(syncFail('Backend updateStudent error:'));
     logAudit('UPDATE', 'Student', student.id, `Updated profile for ${student.firstName} ${student.lastName}`);
   };
 
@@ -961,7 +1102,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       students: [...newStudents, ...(prev.students || [])],
     }));
 
-    api.bulkImportStudents(newStudents).catch((err) => console.warn('Backend bulkImport error:', err));
+    api.bulkImportStudents(newStudents).catch(syncFail('Backend bulkImport error:'));
     logAudit('CREATE', 'Student', 'bulk', `Bulk imported ${newStudents.length} student records`);
     return newStudents.length;
   };
@@ -971,7 +1112,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ...prev,
       students: (prev.students || []).filter((s: Student) => s.id !== id),
     }));
-    api.deleteStudent(id).catch((err) => console.warn('Backend deleteStudent error:', err));
+    api.deleteStudent(id).catch(syncFail('Backend deleteStudent error:'));
     logAudit('DELETE', 'Student', id, `Removed student record ${id}`);
   };
 
@@ -981,7 +1122,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ...prev,
       students: (prev.students || []).filter((s: Student) => !idsSet.has(s.id)),
     }));
-    api.bulkDeleteStudents(ids).catch((err) => console.warn('Backend bulkDeleteStudents error:', err));
+    api.bulkDeleteStudents(ids).catch(syncFail('Backend bulkDeleteStudents error:'));
     logAudit('DELETE', 'Student', 'bulk', `Bulk removed ${ids.length} student records`);
   };
 
@@ -990,7 +1131,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ...prev,
       admissionRequests: (prev.admissionRequests || []).filter((a: AdmissionRequest) => a.id !== id),
     }));
-    api.deleteAdmissionRequest(id).catch((err) => console.warn('Backend deleteAdmission error:', err));
+    api.deleteAdmissionRequest(id).catch(syncFail('Backend deleteAdmission error:'));
     logAudit('DELETE', 'AdmissionRequest', id, `Removed admission request ${id}`);
   };
 
@@ -1000,7 +1141,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ...prev,
       admissionRequests: (prev.admissionRequests || []).filter((a: AdmissionRequest) => !idsSet.has(a.id)),
     }));
-    api.bulkDeleteAdmissionRequests(ids).catch((err) => console.warn('Backend bulkDeleteAdmission error:', err));
+    api.bulkDeleteAdmissionRequests(ids).catch(syncFail('Backend bulkDeleteAdmission error:'));
     logAudit('DELETE', 'AdmissionRequest', 'bulk', `Bulk removed ${ids.length} admission requests`);
   };
 
@@ -1062,7 +1203,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ],
     }));
 
-    api.saveTimetableSlot(newSlot).catch((err) => console.warn('Backend timetable save notice:', err));
+    api.saveTimetableSlot(newSlot).catch(syncFail('Backend timetable save notice:'));
     logAudit('CREATE', 'TimetableSlot', newSlot.id, `Added slot for class ${newSlot.classId} Period ${newSlot.periodNo}`);
     return { success: true };
   };
@@ -1072,7 +1213,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ...prev,
       timetableSlots: (prev.timetableSlots || []).filter((s: TimetableSlot) => s.id !== id),
     }));
-    api.deleteTimetableSlot(id).catch((err) => console.warn('Backend timetable delete notice:', err));
+    api.deleteTimetableSlot(id).catch(syncFail('Backend timetable delete notice:'));
     logAudit('DELETE', 'TimetableSlot', id, `Removed slot ${id}`);
   };
 
@@ -1081,7 +1222,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ...prev,
       timetableSlots: (prev.timetableSlots || []).filter((s: TimetableSlot) => s.classId !== classId),
     }));
-    api.clearClassTimetable(classId).catch((err) => console.warn('Backend timetable clear notice:', err));
+    api.clearClassTimetable(classId).catch(syncFail('Backend timetable clear notice:'));
     logAudit('DELETE', 'Timetable', classId, `Cleared all timetable slots for class ${classId}`);
   };
 
@@ -1090,15 +1231,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ...prev,
       timetableSlots: (prev.timetableSlots || []).filter((s: TimetableSlot) => s.teacherId !== teacherId),
     }));
-    api.clearTeacherTimetable(teacherId).catch((err) => console.warn('Backend timetable clear notice:', err));
+    api.clearTeacherTimetable(teacherId).catch(syncFail('Backend timetable clear notice:'));
     logAudit('DELETE', 'Timetable', teacherId, `Cleared all timetable slots for teacher ${teacherId}`);
   };
 
   const autoGenerateClassTimetable = (classId: string) => {
-    const core9SubjectIds = [
-      'subj-math', 'subj-sci', 'subj-eng', 'subj-tam', 'subj-isl',
-      'subj-his', 'subj-ict', 'subj-geo', 'subj-civ'
-    ];
     const periodTimesMap: Record<number, [string, string]> = {
       1: ['08:00', '08:45'],
       2: ['08:45', '09:30'],
@@ -1112,16 +1249,23 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const cls = (store.classes || []).find((c: Class) => c.id === classId);
     const roomName = cls ? `Hall ${cls.grade.replace('Grade ', '')}${cls.section}` : 'Classroom';
-    const assignments = store.teachingAssignments || [];
+    // Rotate through the subjects the Principal actually allocated to this class
+    const assignments = (store.teachingAssignments || []).filter((a: TeachingAssignment) => a.classId === classId);
+    if (assignments.length === 0) {
+      return {
+        success: false,
+        error: 'Allocate subject teachers to this class first — the timetable is generated from those allocations.',
+      };
+    }
 
     const newSlots: TimetableSlot[] = [];
     let idCount = 1;
 
     for (let day = 1; day <= 5; day++) {
       for (let period = 1; period <= 8; period++) {
-        const subId = core9SubjectIds[(day * 3 + period) % core9SubjectIds.length];
-        const ta = assignments.find((a: TeachingAssignment) => a.classId === classId && a.subjectId === subId);
-        const teacherId = ta ? ta.teacherId : 'tch-1';
+        const ta = assignments[(day * 3 + period) % assignments.length];
+        const subId = ta.subjectId;
+        const teacherId = ta.teacherId;
         const [startTime, endTime] = periodTimesMap[period];
 
         newSlots.push({
@@ -1145,8 +1289,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ...newSlots,
       ],
     }));
-    api.autoGenerateTimetable(classId, newSlots).catch((err) => console.warn('Backend autoGenerate notice:', err));
+    api.autoGenerateTimetable(classId, newSlots).catch(syncFail('Backend autoGenerate notice:'));
     logAudit('CREATE', 'Timetable', classId, `Auto-generated weekly 40-period timetable for class ${classId}`);
+    return { success: true };
   };
 
   const copyClassTimetable = (sourceClassId: string, targetClassId: string) => {
@@ -1169,6 +1314,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ...copiedSlots,
       ],
     }));
+    api.autoGenerateTimetable(targetClassId, copiedSlots).catch(syncFail('Backend copyTimetable notice:'));
     logAudit('CREATE', 'Timetable', targetClassId, `Copied timetable from ${sourceClassId} to ${targetClassId}`);
   };
 
@@ -1231,7 +1377,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       subjectId,
       marksObtained: marks,
       grade,
-    }).catch((err) => console.warn('Backend API save exam result notice:', err));
+    }).catch(syncFail('Backend API save exam result notice:'));
 
     logAudit('UPDATE', 'ExamResult', studentId, `Saved exam score ${marks}/${maxMarks} (${grade})`);
   };
@@ -1280,7 +1426,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       libraryTransactions: [newTx, ...(prev.libraryTransactions || [])],
     }));
 
-    api.issueLibraryBook(newTx).catch((err) => console.warn('Backend issueLibraryBook error:', err));
+    api.issueLibraryBook(newTx).catch(syncFail('Backend issueLibraryBook error:'));
     logAudit('CREATE', 'LibraryTransaction', itemId, `Issued "${item.title}" to ${borrowerType} ${borrowerName || borrowerId}`);
   };
 
@@ -1316,7 +1462,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
     });
 
-    api.returnLibraryBook(transactionId, { fineAmountCollected, remarks }).catch((err) => console.warn('Backend returnLibraryBook error:', err));
+    api.returnLibraryBook(transactionId, { fineAmountCollected, remarks }).catch(syncFail('Backend returnLibraryBook error:'));
     logAudit('UPDATE', 'LibraryTransaction', transactionId, `Returned book transaction`);
   };
 
@@ -1356,8 +1502,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       inventoryTransactions: [newTx, ...(prev.inventoryTransactions || [])],
     }));
 
-    api.updateInventoryItem(itemId, { quantity: item.quantity - quantity }).catch((err) => console.warn('Backend issueInventoryItem error:', err));
-    api.createInventoryTransaction(newTx).catch((err) => console.warn('Backend createInventoryTransaction error:', err));
+    api.updateInventoryItem(itemId, { quantity: item.quantity - quantity }).catch(syncFail('Backend issueInventoryItem error:'));
+    api.createInventoryTransaction(newTx).catch(syncFail('Backend createInventoryTransaction error:'));
     logAudit('UPDATE', 'InventoryItem', itemId, `Handed over / issued ${quantity} units of "${item.name}" to ${issuedTo}`);
   };
 
@@ -1409,9 +1555,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const targetItem = (store.inventoryItems || []).find((i: InventoryItem) => i.id === tx.itemId);
     if (targetItem) {
-      api.updateInventoryItem(tx.itemId, { quantity: targetItem.quantity + qtyToReturn }).catch((err) => console.warn('Backend returnInventoryItem error:', err));
+      api.updateInventoryItem(tx.itemId, { quantity: targetItem.quantity + qtyToReturn }).catch(syncFail('Backend returnInventoryItem error:'));
     }
-    api.returnInventoryTransaction(transactionId, qtyToReturn, remarks).catch((err) => console.warn('Backend returnInventoryTransaction error:', err));
+    api.returnInventoryTransaction(transactionId, qtyToReturn, remarks).catch(syncFail('Backend returnInventoryTransaction error:'));
     logAudit('UPDATE', 'InventoryTransaction', transactionId, `Returned ${qtyToReturn} units back to stock`);
   };
 
@@ -1420,7 +1566,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ...prev,
       inventoryTransactions: (prev.inventoryTransactions || []).filter((t: InventoryTransaction) => t.id !== transactionId),
     }));
-    api.deleteInventoryTransaction(transactionId).catch((err) => console.warn('Backend deleteInventoryTransaction error:', err));
+    api.deleteInventoryTransaction(transactionId).catch(syncFail('Backend deleteInventoryTransaction error:'));
     logAudit('DELETE', 'InventoryTransaction', transactionId, `Removed inventory transaction record`);
   };
 
@@ -1432,7 +1578,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ...prev,
       welfarePrograms: [newProgram, ...(prev.welfarePrograms || [])],
     }));
-    api.createWelfareProgram(newProgram).catch((err) => console.warn('Backend createWelfareProgram error:', err));
+    api.createWelfareProgram(newProgram).catch(syncFail('Backend createWelfareProgram error:'));
     logAudit('CREATE', 'WelfareProgram', id, `Created welfare program "${newProgram.name}" (AY ${newProgram.academicYear})`);
   };
 
@@ -1443,7 +1589,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         p.id === programId ? { ...p, isArchived: true } : p
       ),
     }));
-    api.deleteWelfareProgram(programId).catch((err) => console.warn('Backend deleteWelfareProgram error:', err));
+    api.deleteWelfareProgram(programId).catch(syncFail('Backend deleteWelfareProgram error:'));
     logAudit('DELETE', 'WelfareProgram', programId, `Archived welfare program template ${programId} (reports preserved)`);
   };
 
@@ -1465,7 +1611,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       welfareEnrolments: [newEnr, ...(prev.welfareEnrolments || [])],
     }));
 
-    api.enrolWelfareStudent(newEnr).catch((err) => console.warn('Backend enrolWelfareStudent error:', err));
+    api.enrolWelfareStudent(newEnr).catch(syncFail('Backend enrolWelfareStudent error:'));
     logAudit('CREATE', 'WelfareEnrolment', programId, `Enrolled student ${studentId} in welfare program`);
   };
 
@@ -1479,7 +1625,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ),
     }));
 
-    api.disburseWelfareItem(enrolmentId).catch((err) => console.warn('Backend disburseWelfareItem error:', err));
+    api.disburseWelfareItem(enrolmentId).catch(syncFail('Backend disburseWelfareItem error:'));
     logAudit('UPDATE', 'WelfareEnrolment', enrolmentId, `Confirmed welfare disbursement`);
   };
 
@@ -1539,7 +1685,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     // Persist announcement and generated notifications to backend
-    api.createAnnouncement(newAnn).catch((err) => console.warn('Backend createAnnouncement error:', err));
+    api.createAnnouncement(newAnn).catch(syncFail('Backend createAnnouncement error:'));
     generatedNotifs.forEach((n) => {
       api.createNotification(n).catch((err) => console.warn('Backend createNotification error:', err));
     });
@@ -1562,7 +1708,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         announcements: updatedAnnouncements,
       };
     });
-    api.deleteAnnouncement(id).catch((err) => console.warn('Backend deleteAnnouncement error:', err));
+    api.deleteAnnouncement(id).catch(syncFail('Backend deleteAnnouncement error:'));
     logAudit('DELETE', 'Announcement', id, `Removed announcement ${id}`);
   };
 
@@ -1719,7 +1865,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isActive: user.isActive,
       phone: user.phone,
       password: user.password,
-    }).catch((err) => console.warn('Backend updateUserAccount error:', err));
+    }).catch(syncFail('Backend updateUserAccount error:'));
 
     logAudit('UPDATE', 'User', user.id, `Updated account credentials for ${user.fullName} (${user.email})`);
   };
@@ -1807,10 +1953,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         qualification: newTeacher.qualification,
         subjectSpecialization: newTeacher.subjectSpecialization,
         employeeNo: empNo,
-      }).catch((err) => console.warn('Backend createTeacher error:', err));
-      if (payload.classId) {
-        api.assignClassTeacher(payload.classId, newTeacher.id).catch((err) => console.warn('Backend assignClassTeacher error:', err));
-      }
+      })
+        .then(() => (payload.classId ? api.assignClassTeacher(payload.classId, newTeacher!.id) : undefined))
+        .catch(syncFail('Backend createTeacher error:'));
     } else if (newStaff) {
       api.createStaff({
         id: newStaff.id,
@@ -1821,7 +1966,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         roleDescription: newStaff.roleDescription,
         department: newStaff.department,
         employeeNo: empNo,
-      }).catch((err) => console.warn('Backend createStaff error:', err));
+      }).catch(syncFail('Backend createStaff error:'));
     }
 
     const categoryLabel = payload.category === 'teacher' ? 'Class / Academic Teacher' : 'Supporting Staff';
@@ -1892,7 +2037,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       qualification: teacherData.qualification,
       subjectSpecialization: teacherData.subjectSpecialization,
       employeeNo: empNo,
-    }).catch((err) => console.warn('Backend createTeacher error:', err));
+    }).catch(syncFail('Backend createTeacher error:'));
 
     logAudit('CREATE', 'Teacher', teacherId, `Registered new Teacher: ${teacherData.fullName} (${teacherData.subjectSpecialization})`);
   };
@@ -1934,6 +2079,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
     });
 
+    api.updateTeacher(teacherId, data).catch(syncFail('Backend updateTeacher error:'));
     logAudit('UPDATE', 'Teacher', teacherId, `Updated Teacher details: ${data.fullName}`);
   };
 
@@ -1963,6 +2109,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
     });
 
+    api.deleteTeacher(teacherId).catch(syncFail('Backend deleteTeacher error:'));
     logAudit('DELETE', 'Teacher', teacherId, `Deleted Teacher record: ${teacherId}`);
   };
 
@@ -2012,7 +2159,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       roleDescription: staffData.roleDescription,
       department: staffData.department,
       employeeNo: empNo,
-    }).catch((err) => console.warn('Backend createStaff error:', err));
+    }).catch(syncFail('Backend createStaff error:'));
 
     logAudit('CREATE', 'Staff', staffId, `Registered new staff member: ${staffData.fullName} (${staffData.roleDescription})`);
   };
@@ -2024,9 +2171,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       classes: (prev.classes || INITIAL_CLASSES).map((c: Class) => (c.id === classId ? { ...c, classTeacherId: teacherId } : c)),
     }));
 
-    api.assignClassTeacher(classId, teacherId).catch((err) => {
-      console.warn('Backend API class-teacher sync notice:', err);
-    });
+    api.assignClassTeacher(classId, teacherId).catch(syncFail('Backend assignClassTeacher error:'));
 
     logAudit('UPDATE', 'Class', classId, `Principal assigned Class Teacher ${teacherId} to class ${classId}`);
   };
@@ -2070,7 +2215,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const updatedTimetable = (prev.timetableSlots || []).map((slot: TimetableSlot) => {
         if (slot.classId === classId && slot.subjectId === subjectId) {
           const updatedSlot = { ...slot, teacherId };
-          api.saveTimetableSlot(updatedSlot).catch((err) => console.warn('Backend timetable slot update notice:', err));
+          api.saveTimetableSlot(updatedSlot).catch(syncFail('Backend timetable slot update notice:'));
           return updatedSlot;
         }
         return slot;
@@ -2079,9 +2224,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { ...prev, teachingAssignments: updated, timetableSlots: updatedTimetable };
     });
 
-    api.assignSubjectTeacher(classId, subjectId, teacherId).catch((err) => {
-      console.warn('Backend API teaching-assignment sync notice:', err);
-    });
+    api.assignSubjectTeacher(classId, subjectId, teacherId).catch(syncFail('Backend assignSubjectTeacher error:'));
 
     const sub = (store.subjects || INITIAL_SUBJECTS).find((s: Subject) => s.id === subjectId);
     logAudit('UPDATE', 'TeachingAssignment', classId, `Principal assigned Teacher ${teacherId} to teach ${sub?.name || 'Subject'} in class ${classId}`);
@@ -2100,9 +2243,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       subjects: [...(prev.subjects || INITIAL_SUBJECTS), newSubject],
     }));
 
-    api.createSubject(newSubject).catch((err) => {
-      console.warn('Backend API createSubject sync notice:', err);
-    });
+    api.createSubject(newSubject).catch(syncFail('Backend createSubject error:'));
 
     logAudit('CREATE', 'Subject', id, `Principal added subject ${newSubject.name} (${newSubject.code}) for ${newSubject.gradeLevel}`);
   };
@@ -2115,9 +2256,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ),
     }));
 
-    api.updateSubject(subjectData.id, subjectData).catch((err) => {
-      console.warn('Backend API updateSubject sync notice:', err);
-    });
+    api.updateSubject(subjectData.id, subjectData).catch(syncFail('Backend updateSubject error:'));
 
     logAudit('UPDATE', 'Subject', subjectData.id, `Principal updated subject ${subjectData.name} (${subjectData.code}) - ${subjectData.periodsPerWeek} periods/wk, Target: ${subjectData.gradeLevel}`);
   };
@@ -2128,9 +2267,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       subjects: (prev.subjects || INITIAL_SUBJECTS).filter((s: Subject) => s.id !== id),
     }));
 
-    api.deleteSubject(id).catch((err) => {
-      console.warn('Backend API deleteSubject sync notice:', err);
-    });
+    api.deleteSubject(id).catch(syncFail('Backend deleteSubject error:'));
 
     logAudit('DELETE', 'Subject', id, `Principal deleted subject ${id}`);
   };
@@ -2155,7 +2292,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       academicYear: newClass.academicYear,
       capacity: newClass.capacity,
       classTeacherId: newClass.classTeacherId || undefined,
-    }).catch((err) => console.warn('Backend createClass error:', err));
+    }).catch(syncFail('Backend createClass error:'));
 
     logAudit('CREATE', 'Class', id, `Principal created class ${newClass.grade} - Section ${newClass.section} (AY ${newClass.academicYear})`);
   };
@@ -2171,7 +2308,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       section: classData.section,
       academicYear: classData.academicYear,
       capacity: classData.capacity,
-    }).catch((err) => console.warn('Backend updateClass error:', err));
+    }).catch(syncFail('Backend updateClass error:'));
 
     logAudit('UPDATE', 'Class', classData.id, `Principal updated class ${classData.grade} - Section ${classData.section}`);
   };
@@ -2182,7 +2319,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       classes: (prev.classes || []).filter((c: Class) => c.id !== id),
     }));
 
-    api.deleteClass(id).catch((err) => console.warn('Backend deleteClass error:', err));
+    api.deleteClass(id).catch(syncFail('Backend deleteClass error:'));
 
     logAudit('DELETE', 'Class', id, `Principal deleted class ${id}`);
   };
@@ -2195,7 +2332,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ...prev,
       libraryItems: [newItem, ...(prev.libraryItems || [])],
     }));
-    api.createLibraryItem(newItem).catch((err) => console.warn('Backend createLibraryItem error:', err));
+    api.createLibraryItem(newItem).catch(syncFail('Backend createLibraryItem error:'));
     logAudit('CREATE', 'LibraryItem', id, `Added book "${newItem.title}" (${newItem.isbn}) to catalogue — ${newItem.copiesTotal} cop${newItem.copiesTotal === 1 ? 'y' : 'ies'}`);
   };
 
@@ -2204,7 +2341,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ...prev,
       libraryItems: (prev.libraryItems || []).map((i: LibraryItem) => (i.id === itemData.id ? itemData : i)),
     }));
-    api.updateLibraryItem(itemData.id, itemData).catch((err) => console.warn('Backend updateLibraryItem error:', err));
+    api.updateLibraryItem(itemData.id, itemData).catch(syncFail('Backend updateLibraryItem error:'));
     logAudit('UPDATE', 'LibraryItem', itemData.id, `Updated catalogue entry for "${itemData.title}"`);
   };
 
@@ -2213,7 +2350,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ...prev,
       libraryItems: (prev.libraryItems || []).filter((i: LibraryItem) => i.id !== id),
     }));
-    api.deleteLibraryItem(id).catch((err) => console.warn('Backend deleteLibraryItem error:', err));
+    api.deleteLibraryItem(id).catch(syncFail('Backend deleteLibraryItem error:'));
     logAudit('DELETE', 'LibraryItem', id, `Removed book ${id} from catalogue`);
   };
 
@@ -2225,7 +2362,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ...prev,
       inventoryItems: [newItem, ...(prev.inventoryItems || [])],
     }));
-    api.createInventoryItem(newItem).catch((err) => console.warn('Backend createInventoryItem error:', err));
+    api.createInventoryItem(newItem).catch(syncFail('Backend createInventoryItem error:'));
     logAudit('CREATE', 'InventoryItem', id, `Added "${newItem.name}" to inventory — ${newItem.quantity} ${newItem.unit}`);
   };
 
@@ -2234,7 +2371,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ...prev,
       inventoryItems: (prev.inventoryItems || []).map((i: InventoryItem) => (i.id === itemData.id ? itemData : i)),
     }));
-    api.updateInventoryItem(itemData.id, itemData).catch((err) => console.warn('Backend updateInventoryItem error:', err));
+    api.updateInventoryItem(itemData.id, itemData).catch(syncFail('Backend updateInventoryItem error:'));
     logAudit('UPDATE', 'InventoryItem', itemData.id, `Updated inventory entry for "${itemData.name}"`);
   };
 
@@ -2243,7 +2380,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ...prev,
       inventoryItems: (prev.inventoryItems || []).filter((i: InventoryItem) => i.id !== id),
     }));
-    api.deleteInventoryItem(id).catch((err) => console.warn('Backend deleteInventoryItem error:', err));
+    api.deleteInventoryItem(id).catch(syncFail('Backend deleteInventoryItem error:'));
     logAudit('DELETE', 'InventoryItem', id, `Removed inventory item ${id}`);
   };
 
@@ -2255,7 +2392,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         s.id === studentId ? { ...s, classId } : s
       ),
     }));
-    api.assignStudentClass(studentId, classId).catch((err) => console.warn('Backend assignStudentClass error:', err));
+    api.assignStudentClass(studentId, classId).catch(syncFail('Backend assignStudentClass error:'));
     const targetClass = (store.classes || INITIAL_CLASSES).find((c: Class) => c.id === classId);
     logAudit(
       'UPDATE',
@@ -2311,7 +2448,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
     });
 
-    api.updateLeaveStatus(id, status).catch((err) => console.warn('Backend updateLeaveStatus error:', err));
+    api.updateLeaveStatus(id, status).catch(syncFail('Backend updateLeaveStatus error:'));
     if (applicantNotif) {
       api.createNotification(applicantNotif).catch((err) => console.warn('Backend createNotification error:', err));
     }
@@ -2355,7 +2492,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       signedByPrincipal: status === 'approved',
       signedAt: status === 'approved' ? new Date().toISOString() : undefined,
       principalName: status === 'approved' ? (currentUser?.fullName || 'Principal') : undefined,
-    }).catch((err) => console.warn('Backend updateAdmissionRequest error:', err));
+    }).catch(syncFail('Backend updateAdmissionRequest error:'));
     logAudit('APPROVE', 'AdmissionRequest', id, `Principal ${status} admission request ${id}`);
   };
 
@@ -2388,7 +2525,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       notifications: [stuNotif, ...(prev.notifications || [])],
     }));
 
-    api.updateAdmissionRequest(requestId, { studentRoster: updatedRoster }).catch((err) => console.warn('Backend issueStudentPass error:', err));
+    api.updateAdmissionRequest(requestId, { studentRoster: updatedRoster }).catch(syncFail('Backend issueStudentPass error:'));
     logAudit('UPDATE', 'AdmissionRequest', requestId, `Class Teacher issued exam hall pass to student ${studentNo}`);
   };
 
@@ -2408,7 +2545,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ),
     }));
 
-    api.updateAdmissionRequest(requestId, { studentRoster: updatedRoster }).catch((err) => console.warn('Backend issueAllPasses error:', err));
+    api.updateAdmissionRequest(requestId, { studentRoster: updatedRoster }).catch(syncFail('Backend issueAllPasses error:'));
     logAudit('UPDATE', 'AdmissionRequest', requestId, `Class Teacher issued all eligible exam hall passes`);
   };
 
@@ -2440,7 +2577,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ),
     }));
 
-    api.updateAdmissionRequest(requestId, { studentRoster: updatedRoster, eligibleStudentCount: eligibleCount }).catch((err) => console.warn('Backend updateStudentExamEligibility error:', err));
+    api.updateAdmissionRequest(requestId, { studentRoster: updatedRoster, eligibleStudentCount: eligibleCount }).catch(syncFail('Backend updateStudentExamEligibility error:'));
     logAudit('UPDATE', 'AdmissionRequest', requestId, `Updated exam eligibility for ${studentNo} to ${isEligible}`);
   };
 
@@ -2457,7 +2594,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ...prev,
         purchaseDisposalRequests: (prev.purchaseDisposalRequests || []).map((p: PurchaseDisposalRequest) => (p.id === id ? { ...p, status } : p)),
       }));
-      api.updatePurchaseDisposalStatus(id, status).catch((err) => console.warn('Backend updatePurchaseStatus error:', err));
+      api.updatePurchaseDisposalStatus(id, status).catch(syncFail('Backend updatePurchaseStatus error:'));
       logAudit('APPROVE', 'PurchaseDisposalRequest', id, `Principal ${status} inventory request ${id}`);
       return;
     }
@@ -2499,9 +2636,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }));
 
       if (matchedItem) {
-        api.updateInventoryItem(matchedItem.id, { quantity: updatedQty }).catch((err) => console.warn('Backend updateInventoryItem error:', err));
+        api.updateInventoryItem(matchedItem.id, { quantity: updatedQty }).catch(syncFail('Backend updateInventoryItem error:'));
       } else if (newItem) {
-        api.createInventoryItem(newItem).catch((err) => console.warn('Backend createInventoryItem error:', err));
+        api.createInventoryItem(newItem).catch(syncFail('Backend createInventoryItem error:'));
       }
     } else if (matchedItem) {
       // Disposal — only removes stock when a matching item actually exists.
@@ -2523,7 +2660,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         inventoryTransactions: [newTx, ...(prev.inventoryTransactions || [])],
       }));
 
-      api.updateInventoryItem(matchedItem.id, { quantity: updatedQty }).catch((err) => console.warn('Backend updateInventoryItem error:', err));
+      api.updateInventoryItem(matchedItem.id, { quantity: updatedQty }).catch(syncFail('Backend updateInventoryItem error:'));
     } else {
       setStore((prev: any) => ({
         ...prev,
@@ -2531,7 +2668,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }));
     }
 
-    api.updatePurchaseDisposalStatus(id, status).catch((err) => console.warn('Backend updatePurchaseStatus error:', err));
+    api.updatePurchaseDisposalStatus(id, status).catch(syncFail('Backend updatePurchaseStatus error:'));
     logAudit('APPROVE', 'PurchaseDisposalRequest', id, `Principal ${status} inventory request ${id}`);
   };
 
@@ -2570,7 +2707,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
     });
 
-    api.createLeaveRequest(newReq).catch((err) => console.warn('Backend addLeave error:', err));
+    api.createLeaveRequest(newReq).catch(syncFail('Backend addLeave error:'));
     api.createNotification(principalNotif).catch((err) => console.warn('Backend createNotification error:', err));
     logAudit('CREATE', 'LeaveRequest', newReq.id, `Submitted leave request for ${req.applicantName}`);
   };
@@ -2600,7 +2737,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       admissionRequests: [newReq, ...(prev.admissionRequests || INITIAL_ADMISSION_REQUESTS)],
       notifications: [principalNotif, ...(prev.notifications || [])],
     }));
-    api.createAdmissionRequest(newReq).catch((err) => console.warn('Backend addAdmission error:', err));
+    api.createAdmissionRequest(newReq).catch(syncFail('Backend addAdmission error:'));
     api.createNotification(principalNotif).catch((err) => console.warn('Backend createNotification error:', err));
     logAudit('CREATE', 'AdmissionRequest', newReq.id, `Submitted admission requisition for ${newReq.studentName}`);
   };
@@ -2679,7 +2816,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
     });
 
-    api.createPurchaseDisposalRequest(newReq).catch((err) => console.warn('Backend addPurchaseDisposalRequest error:', err));
+    api.createPurchaseDisposalRequest(newReq).catch(syncFail('Backend addPurchaseDisposalRequest error:'));
     api.createNotification(principalNotif).catch((err) => console.warn('Backend createNotification error:', err));
     logAudit('CREATE', 'PurchaseDisposalRequest', newReq.id, `Submitted ${req.type} request for ${req.itemName}`);
   };
@@ -2797,9 +2934,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       (uId && c.classTeacherId === uId) ||
       (eNo && c.classTeacherId === eNo)
     );
-  }) || (store.classes && store.classes.length > 0 ? store.classes[0] : undefined);
+  }) || (activeRole !== 'teacher' && store.classes && store.classes.length > 0 ? store.classes[0] : undefined);
 
-  const assignedClassId = userAssignedClass ? userAssignedClass.id : (store.classes && store.classes.length > 0 ? store.classes[0].id : '');
+  const assignedClassId = userAssignedClass ? userAssignedClass.id : '';
 
   return (
     <DataContext.Provider
@@ -2838,6 +2975,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         schoolProfile: store.schoolProfile || INITIAL_SCHOOL_PROFILE,
         userAssignedClass,
         assignedClassId,
+        syncError,
+        dismissSyncError,
+        backendOffline,
         markAttendance,
         bulkMarkAttendance,
         addStudent,

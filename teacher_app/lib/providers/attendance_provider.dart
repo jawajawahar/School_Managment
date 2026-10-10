@@ -37,7 +37,7 @@ class AttendanceProvider extends ChangeNotifier {
       totalStudents > 0 ? ((presentCount + lateCount) / totalStudents) * 100 : 0.0;
 
   String get selectedClassName {
-    if (_selectedClassId == null || _classes.isEmpty) return 'Class Register';
+    if (_selectedClassId == null || _classes.isEmpty) return 'No class assigned';
     final found = _classes.firstWhere(
       (c) => c['id'] == _selectedClassId,
       orElse: () => _classes.first,
@@ -52,9 +52,6 @@ class AttendanceProvider extends ChangeNotifier {
     return found['name'] ?? _selectedClassId!;
   }
 
-  AttendanceProvider() {
-    loadClasses();
-  }
 
   /// Get allowed classes for a user.
   /// Standard class teachers are strictly limited to their assigned class.
@@ -80,7 +77,7 @@ class AttendanceProvider extends ChangeNotifier {
         }
       ];
     }
-    return _classes;
+    return isTeacher ? [] : _classes;
   }
 
   Future<void> loadClasses({String? preferredClassId, String? userRole, UserModel? user}) async {
@@ -91,7 +88,12 @@ class AttendanceProvider extends ChangeNotifier {
     final isTeacher = userRole != 'admin' && userRole != 'principal' && userRole != 'admin_staff';
     final targetClassId = preferredClassId ?? user?.assignedClassId;
 
-    if (allFetchedClasses.isNotEmpty) {
+    if (isTeacher && (targetClassId == null || targetClassId.isEmpty)) {
+      // Not a class teacher (yet): there is no roster to show.
+      _classes = [];
+      _selectedClassId = null;
+      _students = [];
+    } else if (allFetchedClasses.isNotEmpty) {
       if (isTeacher && targetClassId != null && targetClassId.isNotEmpty) {
         final matching = allFetchedClasses.where((c) {
           final cId = c['id'].toString();
@@ -122,8 +124,8 @@ class AttendanceProvider extends ChangeNotifier {
       _classes = [
         {
           'id': targetClassId,
-          'grade': user?.assignedGrade ?? 'Grade 10',
-          'section': user?.assignedSection ?? 'A',
+          'grade': user?.assignedGrade ?? 'Assigned',
+          'section': user?.assignedSection ?? 'Class',
         }
       ];
       _selectedClassId = targetClassId;
@@ -193,7 +195,7 @@ class AttendanceProvider extends ChangeNotifier {
     if (success) {
       _message = 'Attendance registered successfully!';
     } else {
-      _message = 'Failed to record attendance. Saved locally.';
+      _message = 'Attendance was not saved. Check your connection and try again.';
     }
     notifyListeners();
     return success;

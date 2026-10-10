@@ -1,6 +1,7 @@
 const { Pool } = require('pg');
 const fs = require('fs');
 const path = require('path');
+const { seedReferenceData } = require('./referenceData');
 const envPath = fs.existsSync(path.join(__dirname, '.env'))
   ? path.join(__dirname, '.env')
   : path.join(__dirname, '../.env');
@@ -15,10 +16,16 @@ const pool = new Pool({
   ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
 });
 
-// Auto-initialize PostgreSQL 3NF Tables on startup
-const initDatabase = async () => {
+// Auto-initialize PostgreSQL 3NF Tables on startup. The database can come up
+// after this server (container start order, a waking hosted instance), so
+// keep trying instead of running forever without tables.
+const INIT_RETRY_DELAY_MS = 5000;
+const INIT_MAX_ATTEMPTS = 12;
+
+const initDatabase = async (attempt = 1) => {
+  let client;
   try {
-    const client = await pool.connect();
+    client = await pool.connect();
     console.log('✅ PostgreSQL Database connected successfully.');
 
     const schemaSql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf-8');
@@ -122,10 +129,15 @@ const initDatabase = async () => {
     `);
     console.log('✅ PostgreSQL migrations applied (staff, library, welfare enrolments, extended columns).');
 
-    client.release();
+    await seedReferenceData(client);
   } catch (err) {
     console.warn('⚠️ PostgreSQL Connection Notice:', err.message);
     console.warn('💡 Ensure PostgreSQL service is running and DATABASE_URL in server/.env is configured.');
+    if (attempt < INIT_MAX_ATTEMPTS) {
+      setTimeout(() => initDatabase(attempt + 1), INIT_RETRY_DELAY_MS);
+    }
+  } finally {
+    if (client) client.release();
   }
 };
 

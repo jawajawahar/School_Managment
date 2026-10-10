@@ -31,7 +31,26 @@ class UserModel {
     } else if (assignedGrade != null) {
       return assignedGrade!;
     }
-    return 'Grade 9-A';
+    return 'No class assigned';
+  }
+
+  bool get hasAssignedClass => assignedClassId != null && assignedClassId!.isNotEmpty;
+
+  /// Same account with the class assignment the server currently reports.
+  UserModel withProfile(UserModel fresh) {
+    return UserModel(
+      id: id,
+      teacherId: fresh.teacherId ?? teacherId,
+      email: email,
+      fullName: fresh.fullName,
+      role: fresh.role,
+      phone: fresh.phone ?? phone,
+      schoolId: schoolId,
+      token: token,
+      assignedClassId: fresh.assignedClassId,
+      assignedGrade: fresh.assignedGrade,
+      assignedSection: fresh.assignedSection,
+    );
   }
 
   factory UserModel.fromJson(Map<String, dynamic> json, {String? token}) {

@@ -1,0 +1,14 @@
+.git
+.github
+node_modules
+server/node_modules
+dist
+downloads
+documents
+teacher_app
+scripts
+.env
+server/.env
+*.log
+.vscode
+.idea

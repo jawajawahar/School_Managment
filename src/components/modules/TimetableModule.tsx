@@ -78,12 +78,23 @@ export const TimetableModule: React.FC<{ initialClassId?: string }> = ({ initial
   }, [selectedClassId]);
 
   const isPrincipalOrAdmin = ['principal', 'vice_principal', 'admin'].includes(activeRole);
-  const loggedInTeacher = teachers.find((t) => t.userId === currentUser?.id) || teachers[0];
+  // A teacher only ever sees their own record; only the Principal/Admin gets a default pick.
+  const loggedInTeacher = teachers.find((t) => t.userId === currentUser?.id) || (isPrincipalOrAdmin ? teachers[0] : undefined);
 
   // Selected Teacher for Teacher View (locked to loggedInTeacher if not principal)
-  const [selectedTeacherId, setSelectedTeacherId] = useState<string>(
-    isPrincipalOrAdmin ? (loggedInTeacher?.id || 'tch-1') : (loggedInTeacher?.id || 'tch-3')
-  );
+  const [selectedTeacherId, setSelectedTeacherId] = useState<string>(loggedInTeacher?.id || '');
+
+  // Classes and teachers arrive from the server after this screen mounts, so
+  // keep the selection pointing at records that actually exist.
+  useEffect(() => {
+    if (isPrincipalOrAdmin) {
+      if (classes.length > 0 && !classes.some((c) => c.id === selectedClassId)) setSelectedClassId(classes[0].id);
+      if (teachers.length > 0 && !teachers.some((t) => t.id === selectedTeacherId)) setSelectedTeacherId(teachers[0].id);
+    } else {
+      if (assignedClassId && selectedClassId !== assignedClassId) setSelectedClassId(assignedClassId);
+      if (loggedInTeacher && selectedTeacherId !== loggedInTeacher.id) setSelectedTeacherId(loggedInTeacher.id);
+    }
+  }, [isPrincipalOrAdmin, classes, teachers, assignedClassId, loggedInTeacher, selectedClassId, selectedTeacherId]);
 
   // Modals state
   const [showAddModal, setShowAddModal] = useState(false);
@@ -113,6 +124,12 @@ export const TimetableModule: React.FC<{ initialClassId?: string }> = ({ initial
     return `Hall ${cleanGrade}${c.section || ''}`.trim();
   });
   const [errorMessage, setErrorMessage] = useState('');
+
+  // Subjects and teachers load after mount: never submit a slot with a blank or stale pick.
+  useEffect(() => {
+    if (subjects.length > 0 && !subjects.some((s) => s.id === subjectId)) setSubjectId(subjects[0].id);
+    if (teachers.length > 0 && !teachers.some((t) => t.id === teacherId)) setTeacherId(teachers[0].id);
+  }, [subjects, teachers, subjectId, teacherId]);
 
   // Export / Share state
   const [showShareModal, setShowShareModal] = useState(false);
@@ -833,7 +850,7 @@ export const TimetableModule: React.FC<{ initialClassId?: string }> = ({ initial
             <div className="flex items-center gap-3">
               <span className="text-xs font-semibold text-ink-muted uppercase whitespace-nowrap">Teacher</span>
               <CustomSelect
-                options={(isPrincipalOrAdmin ? teachers : [loggedInTeacher]).map((t) => {
+                options={(isPrincipalOrAdmin ? teachers : loggedInTeacher ? [loggedInTeacher] : []).map((t) => {
                   const u = users.find((usr) => usr.id === t.userId);
                   const ctClass = classes.find((c) => c.classTeacherId === t.id || c.classTeacherId === t.userId || c.classTeacherId === t.employeeNo);
                   return {
