@@ -51,6 +51,7 @@ export const TimetableModule: React.FC<{ initialClassId?: string }> = ({ initial
     users,
     students,
     timetableSlots,
+    teachingAssignments,
     activeRole,
     currentUser,
     assignedClassId,
@@ -499,6 +500,102 @@ export const TimetableModule: React.FC<{ initialClassId?: string }> = ({ initial
   const currentModalClassId = targetClassIdModal || selectedClassId;
   const currentModalClass = classes.find((c) => c.id === currentModalClassId);
 
+  // Auto-fetch the allocated teacher for a given subject in a specific class
+  const findAssignedTeacherForSubject = (subId: string, clsId: string): string | null => {
+    if (!subId) return null;
+
+    // 1. Direct match in teaching_assignments table for this class
+    const assignment = teachingAssignments?.find(
+      (ta) => ta.classId === clsId && ta.subjectId === subId
+    );
+    if (assignment?.teacherId) {
+      return assignment.teacherId;
+    }
+
+    // 2. Check if another timetable slot in this class already has this subject taught by a teacher
+    const existingSlot = timetableSlots.find(
+      (s) => s.classId === clsId && s.subjectId === subId && s.teacherId
+    );
+    if (existingSlot?.teacherId) {
+      return existingSlot.teacherId;
+    }
+
+    // 3. Match by teacher subject specialization
+    const subObj = subjects.find((s) => s.id === subId);
+    if (subObj) {
+      const cleanSubName = subObj.name.trim().toLowerCase();
+
+      const matchedTeacher = teachers.find((t) => {
+        const spec = (t.subjectSpecialization || '').trim().toLowerCase();
+        if (!spec) return false;
+        if (spec === cleanSubName) return true;
+        if (spec.includes(cleanSubName) || cleanSubName.includes(spec)) return true;
+
+        if (cleanSubName.includes('islam') && spec.includes('islam')) return true;
+        if (cleanSubName.includes('math') && spec.includes('math')) return true;
+        if (cleanSubName.includes('sci') && spec.includes('sci')) return true;
+        if (cleanSubName.includes('eng') && spec.includes('eng')) return true;
+        if (cleanSubName.includes('tam') && spec.includes('tam')) return true;
+        if (cleanSubName.includes('sin') && spec.includes('sin')) return true;
+        if (cleanSubName.includes('his') && spec.includes('his')) return true;
+        if (cleanSubName.includes('geo') && spec.includes('geo')) return true;
+        if (cleanSubName.includes('civ') && spec.includes('civ')) return true;
+        if (cleanSubName.includes('acc') && (spec.includes('acc') || spec.includes('commerce') || spec.includes('business'))) return true;
+        if (cleanSubName.includes('ict') && (spec.includes('ict') || spec.includes('information technology') || spec.includes('computer'))) return true;
+        if (cleanSubName.includes('health') && (spec.includes('health') || spec.includes('physical education') || spec.includes('p.e'))) return true;
+        if (cleanSubName.includes('agri') && spec.includes('agri')) return true;
+        if (cleanSubName.includes('art') && spec.includes('art')) return true;
+        if (cleanSubName.includes('music') && spec.includes('music')) return true;
+        if (cleanSubName.includes('dance') && spec.includes('danc')) return true;
+        if (cleanSubName.includes('drama') && spec.includes('drama')) return true;
+        return false;
+      });
+
+      if (matchedTeacher) {
+        return matchedTeacher.id;
+      }
+    }
+
+    // 4. Default allocation map for standard curriculum codes
+    const defaultSubjectTeacherMap: Record<string, string> = {
+      'subj-math': 'tch-1',
+      'subj-sci': 'tch-2',
+      'subj-eng': 'tch-3',
+      'subj-tam': 'tch-4',
+      'subj-isl': 'tch-5',
+      'subj-his': 'tch-6',
+      'subj-ict': 'tch-7',
+      'subj-geo': 'tch-9',
+      'subj-civ': 'tch-13',
+    };
+    if (defaultSubjectTeacherMap[subId] && teachers.some((t) => t.id === defaultSubjectTeacherMap[subId])) {
+      return defaultSubjectTeacherMap[subId];
+    }
+
+    return null;
+  };
+
+  const handleSubjectChange = (newSubjectId: string) => {
+    setSubjectId(newSubjectId);
+    const autoTeacherId = findAssignedTeacherForSubject(newSubjectId, currentModalClassId);
+    if (autoTeacherId) {
+      setTeacherId(autoTeacherId);
+    }
+  };
+
+  const handleTargetClassChange = (newClassId: string) => {
+    setTargetClassIdModal(newClassId);
+    setRoom(getClassDefaultRoom(newClassId));
+    const autoTeacherId = findAssignedTeacherForSubject(subjectId, newClassId);
+    if (autoTeacherId) {
+      setTeacherId(autoTeacherId);
+    }
+  };
+
+  const autoMatchedTeacherId = findAssignedTeacherForSubject(subjectId, currentModalClassId);
+  const isAutoMatchedTeacher = Boolean(autoMatchedTeacherId && autoMatchedTeacherId === teacherId);
+  const currentSubjectObj = subjects.find((s) => s.id === subjectId);
+
   // Check if selected teacher has a conflict in another class during this exact day & period
   const conflictingTeacherSlot = teacherId
     ? timetableSlots.find(
@@ -580,6 +677,16 @@ export const TimetableModule: React.FC<{ initialClassId?: string }> = ({ initial
     setTargetClassIdModal(selectedClassId);
     setRoom(getClassDefaultRoom(selectedClassId));
     setErrorMessage('');
+
+    // Pre-select teacher for currently selected subject in this class
+    const activeSubId = subjectId || subjects[0]?.id || '';
+    if (activeSubId) {
+      const autoTeacherId = findAssignedTeacherForSubject(activeSubId, selectedClassId);
+      if (autoTeacherId) {
+        setTeacherId(autoTeacherId);
+      }
+    }
+
     setShowAddModal(true);
   };
 
@@ -1101,10 +1208,7 @@ export const TimetableModule: React.FC<{ initialClassId?: string }> = ({ initial
             <CustomSelect
               options={classes.map((c) => ({ value: c.id, label: `${c.grade} - Section ${c.section} (${c.academicYear})` }))}
               value={targetClassIdModal}
-              onChange={(newClassId) => {
-                setTargetClassIdModal(newClassId);
-                setRoom(getClassDefaultRoom(newClassId));
-              }}
+              onChange={handleTargetClassChange}
               className="w-full"
             />
           </FormField>
@@ -1132,12 +1236,22 @@ export const TimetableModule: React.FC<{ initialClassId?: string }> = ({ initial
             <CustomSelect
               options={subjects.map((s) => ({ value: s.id, label: `${s.name} (${s.code})` }))}
               value={subjectId}
-              onChange={setSubjectId}
+              onChange={handleSubjectChange}
               className="w-full"
             />
           </FormField>
 
-          <FormField label="Assigned teacher" required>
+          <FormField
+            label="Assigned teacher"
+            required
+            hint={
+              isAutoMatchedTeacher ? (
+                <span className="text-emerald-600 dark:text-emerald-400 font-semibold text-xs flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Auto-fetched teacher for {currentSubjectObj?.name || 'this subject'}
+                </span>
+              ) : undefined
+            }
+          >
             <CustomSelect
               options={teachers.map((t) => {
                 const u = users.find((usr) => usr.id === t.userId);
@@ -1150,9 +1264,11 @@ export const TimetableModule: React.FC<{ initialClassId?: string }> = ({ initial
                 );
                 const busyClass = busySlot ? classes.find((c) => c.id === busySlot.classId) : null;
                 const busySuffix = busyClass ? ` 🚫 [BUSY in ${busyClass.grade} (${busyClass.section})]` : '';
+                const isAutoMatch = Boolean(autoMatchedTeacherId && t.id === autoMatchedTeacherId);
                 return {
                   value: t.id,
                   label: `${u?.fullName || t.employeeNo} (${t.subjectSpecialization})${busySuffix}`,
+                  badge: isAutoMatch ? 'Allocated' : undefined,
                 };
               })}
               value={teacherId}

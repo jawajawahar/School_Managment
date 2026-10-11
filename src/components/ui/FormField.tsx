@@ -56,7 +56,7 @@ interface FormFieldProps {
   label: string;
   htmlFor?: string;
   required?: boolean;
-  hint?: string;
+  hint?: React.ReactNode;
   className?: string;
   children: React.ReactNode;
 }
