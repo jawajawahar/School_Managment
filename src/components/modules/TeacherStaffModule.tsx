@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { UserCheck, BookOpen, Award, CheckCircle, XCircle, Phone, Mail, Crown, Plus, Eye, FileText, ChevronLeft, ChevronRight, Briefcase, Pencil, Trash2, Clock, Search } from 'lucide-react';
 import { useData } from '../../context/DataContext';
 import { CustomSelect } from '../common/CustomSelect';
+import { getCategorizedSubjectOptions } from '../../services/academicRules';
 import { LeaveRequest } from '../../types';
 import { PageHeader } from '../ui/PageHeader';
 import { Badge, BadgeTone } from '../ui/Badge';
@@ -22,6 +23,30 @@ export const TeacherStaffModule: React.FC<TeacherStaffModuleProps> = ({ initialT
   const [activeTab, setActiveTab] = useState<'teachers' | 'staff' | 'leave'>(initialTab);
 
   const [teachersPage, setTeachersPage] = useState<number>(1);
+
+  const subjectSpecializationOptions = (() => {
+    const list = getCategorizedSubjectOptions(subjects, (sub) => sub.name).map((opt) => ({
+      value: opt.label,
+      label: opt.label,
+      group: opt.group,
+    }));
+    if (list.length === 0) {
+      return [
+        'Mathematics',
+        'Science',
+        'English',
+        'Tamil',
+        'Sinhala',
+        'Islam',
+        'History',
+        'Information & Communication Technology (ICT)',
+        'Geography',
+        'Civic Education',
+        'Business & Accounting Studies',
+      ].map((s) => ({ value: s, label: s, group: 'General' }));
+    }
+    return list;
+  })();
 
   useEffect(() => {
     if (initialTab) setActiveTab(initialTab);
@@ -745,7 +770,7 @@ export const TeacherStaffModule: React.FC<TeacherStaffModuleProps> = ({ initialT
               <CustomSelect
                 value={subjectSpecialization}
                 onChange={(val: string) => setSubjectSpecialization(val)}
-                options={['Mathematics', 'Science', 'English', 'Tamil', 'Sinhala', 'Islam', 'History', 'Information Technology (IT)', 'Physical Science', 'Geography', 'Civics'].map((s) => ({ value: s, label: s }))}
+                options={subjectSpecializationOptions}
               />
             </FormField>
           </div>
@@ -939,7 +964,7 @@ export const TeacherStaffModule: React.FC<TeacherStaffModuleProps> = ({ initialT
               <CustomSelect
                 value={editSubjectSpecialization}
                 onChange={(val: string) => setEditSubjectSpecialization(val)}
-                options={['Mathematics', 'Science', 'English', 'Tamil', 'Sinhala', 'Islam', 'History', 'Information Technology (IT)', 'Physical Science', 'Geography', 'Civics'].map((s) => ({ value: s, label: s }))}
+                options={subjectSpecializationOptions}
               />
             </FormField>
           </div>
