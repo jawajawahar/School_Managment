@@ -315,6 +315,107 @@ class ApiService {
     return null;
   }
 
+  // 9d. Exam marks of every student in a class. Null when the server is unreachable.
+  Future<List<ExamResultRecord>?> fetchClassExamResults(String classId) async {
+    final url = Uri.parse('${ApiConstants.baseUrl}${ApiConstants.examResultsEndpoint}').replace(queryParameters: {'classId': classId});
+    try {
+      final response = await client.get(url, headers: headers);
+      if (response.statusCode == 200) {
+        final List list = jsonDecode(response.body);
+        return list.map((item) => ExamResultRecord.fromJson(item)).toList();
+      }
+    } catch (e) {
+      debugPrint('API Error fetching class exam results: $e');
+    }
+    return null;
+  }
+
+  // 9e. Welfare scheme enrolments of a class. Null when the server is unreachable.
+  Future<List<WelfareEnrolmentRecord>?> fetchWelfareEnrolments(String classId) async {
+    final url = Uri.parse('${ApiConstants.baseUrl}${ApiConstants.welfareEnrolmentsEndpoint}').replace(queryParameters: {'classId': classId});
+    try {
+      final response = await client.get(url, headers: headers);
+      if (response.statusCode == 200) {
+        final List list = jsonDecode(response.body);
+        return list.map((item) => WelfareEnrolmentRecord.fromJson(item)).toList();
+      }
+    } catch (e) {
+      debugPrint('API Error fetching welfare enrolments: $e');
+    }
+    return null;
+  }
+
+  // 9f. Intervention requests already sent to the Principal (by anyone, web or app).
+  Future<List<AppNotificationModel>> fetchInterventionRequests() async {
+    final url = Uri.parse('${ApiConstants.baseUrl}${ApiConstants.notificationsEndpoint}').replace(queryParameters: {'kind': 'intervention'});
+    try {
+      final response = await client.get(url, headers: headers);
+      if (response.statusCode == 200) {
+        final List list = jsonDecode(response.body);
+        return list
+            .map((item) => AppNotificationModel.fromJson(item))
+            .where((n) => n.title.toLowerCase().contains('principal intervention') || n.title.toLowerCase().contains('guardian meeting'))
+            .toList();
+      }
+    } catch (e) {
+      debugPrint('API Error fetching intervention requests: $e');
+    }
+    return [];
+  }
+
+  // 9g. Ask the Principal to step in for an at-risk student. True only when the server recorded it.
+  Future<bool> requestPrincipalIntervention({
+    required String studentId,
+    required String studentName,
+    required String studentNo,
+    required String className,
+    required String teacherId,
+    required String teacherName,
+    required String reason,
+    required int attendanceRate,
+  }) async {
+    final url = Uri.parse('${ApiConstants.baseUrl}${ApiConstants.notificationsEndpoint}');
+    try {
+      final response = await client.post(
+        url,
+        headers: headers,
+        body: jsonEncode({
+          // Same recipient, title and wording as the web portal, so the Principal's
+          // inbox and the "already escalated" check treat both sources alike.
+          'recipientId': 'user-principal-1',
+          'title': 'Principal Intervention Requested: $studentName',
+          'message': 'Class Teacher $teacherName requested Principal intervention & parent WhatsApp alert for '
+              '$studentName ($studentNo, $className). Reason: $reason (Attendance: $attendanceRate%).',
+          'channel': 'in_app',
+          'category': 'intervention',
+        }),
+      );
+      if (response.statusCode != 201 && response.statusCode != 200) return false;
+    } catch (e) {
+      debugPrint('API Error requesting intervention: $e');
+      return false;
+    }
+
+    // Audit trail entry; the request itself has already been delivered.
+    try {
+      await client.post(
+        Uri.parse('${ApiConstants.baseUrl}${ApiConstants.auditLogsEndpoint}'),
+        headers: headers,
+        body: jsonEncode({
+          'actorId': teacherId,
+          'actorName': teacherName,
+          'action': 'CREATE',
+          'entity': 'GuardianMeetingRequest',
+          'entityId': studentId,
+          'details': 'Teacher $teacherName requested Principal intervention for student $studentName',
+        }),
+      );
+    } catch (e) {
+      debugPrint('API Error writing audit log: $e');
+    }
+    return true;
+  }
+
   // 10. Fetch Notifications (Targeted to Teacher)
   Future<List<AppNotificationModel>> fetchNotifications({String? userId, String? teacherId, String? classId}) async {
     final queryParams = <String>[];

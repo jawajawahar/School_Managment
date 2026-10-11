@@ -310,7 +310,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                           style: GoogleFonts.inter(
                             fontSize: 13,
                             fontWeight: FontWeight.w700,
-                            color: r.marks < 35 ? AppColors.absentRed : AppColors.presentGreen,
+                            color: r.isFailing ? AppColors.absentRed : AppColors.presentGreen,
                           ),
                         ),
                       ),

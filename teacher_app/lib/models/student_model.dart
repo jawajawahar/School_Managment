@@ -9,6 +9,7 @@ class StudentModel {
   final String guardianPhone;
   final String dateOfBirth;
   final String admissionDate;
+  final List<String> enrolledSubjectIds;
   String attendanceStatus; // 'present', 'absent', 'late', 'excused'
   String? remarks;
 
@@ -23,6 +24,7 @@ class StudentModel {
     this.guardianPhone = '',
     this.dateOfBirth = '',
     this.admissionDate = '',
+    this.enrolledSubjectIds = const [],
     this.attendanceStatus = 'present',
     this.remarks,
   });
@@ -41,6 +43,7 @@ class StudentModel {
       guardianPhone: json['guardianPhone'] ?? json['phone'] ?? '',
       dateOfBirth: json['dateOfBirth'] ?? '',
       admissionDate: json['admissionDate'] ?? '',
+      enrolledSubjectIds: (json['enrolledSubjectIds'] is List) ? List<String>.from((json['enrolledSubjectIds'] as List).map((e) => e.toString())) : const [],
       attendanceStatus: json['attendanceStatus'] ?? 'present',
       remarks: json['remarks'],
     );

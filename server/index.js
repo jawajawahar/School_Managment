@@ -1163,6 +1163,23 @@ app.delete('/api/announcements/:id', async (req, res) => {
 // ==========================================
 app.get('/api/notifications', async (req, res) => {
   const { userId, teacherId, classId } = req.query;
+  if (req.query.kind === 'intervention') {
+    try {
+      const { rows } = await query(
+        `SELECT id, recipient_id AS "recipientId", title, message, channel, status,
+                COALESCE(category, 'general') AS category, COALESCE(is_read, false) AS "isRead",
+                sent_at AS "sentAt"
+         FROM notifications
+         WHERE category = 'intervention'
+            OR title ILIKE '%principal intervention%'
+            OR title ILIKE '%guardian meeting%'
+         ORDER BY sent_at DESC LIMIT 300`
+      );
+      return res.json(rows);
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
   try {
     let queryStr = `
       SELECT id, recipient_id AS "recipientId", title, message, channel, status,
@@ -1636,11 +1653,19 @@ app.delete('/api/welfare-programs/:id', async (req, res) => {
 });
 
 app.get('/api/welfare-enrolments', async (req, res) => {
+  const classId = req.query.classId || null;
   try {
     const { rows } = await query(
-      `SELECT id, program_id AS "programId", student_id AS "studentId", status,
-              TO_CHAR(disbursed_at, 'YYYY-MM-DD"T"HH24:MI:SS') AS "disbursedAt", remarks
-       FROM welfare_enrolments ORDER BY id DESC`
+      `SELECT we.id, we.program_id AS "programId", we.student_id AS "studentId", we.status,
+              TO_CHAR(we.disbursed_at, 'YYYY-MM-DD"T"HH24:MI:SS') AS "disbursedAt", we.remarks,
+              s.first_name || ' ' || s.last_name AS "studentName", s.student_no AS "studentNo",
+              s.class_id AS "classId", wp.name AS "programName"
+       FROM welfare_enrolments we
+       LEFT JOIN students s ON we.student_id = s.id
+       LEFT JOIN welfare_programs wp ON we.program_id = wp.id
+       WHERE ($1::text IS NULL OR s.class_id = $1)
+       ORDER BY we.id DESC`,
+      [classId]
     );
     res.json(rows);
   } catch (err) {
@@ -3038,7 +3063,8 @@ app.get('/api/exam-results', async (req, res) => {
     const { rows } = await query(
       `SELECT r.id, r.exam_id AS "examId", r.student_id AS "studentId", s.student_no AS "studentNo",
               r.subject_id AS "subjectId", r.marks_obtained AS "marksObtained", r.grade, r.remarks,
-              sub.name AS "subjectName", e.name AS "examName", e.term AS "examTerm"
+              sub.name AS "subjectName", sub.category AS "subjectCategory",
+              e.name AS "examName", e.term AS "examTerm", e.academic_year AS "academicYear"
        FROM exam_results r
        LEFT JOIN students s ON r.student_id = s.id
        LEFT JOIN subjects sub ON r.subject_id = sub.id

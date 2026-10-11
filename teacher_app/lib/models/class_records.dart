@@ -57,22 +57,26 @@ class AttendanceSummary {
 
   int get total => present + absent + late + excused;
 
-  /// Days that count towards the rate: an excused absence is not held against the student.
-  int get countedDays => present + absent + late;
+  /// Share of marked days the student was in school, 0-100. Null with no data.
+  /// Same formula as the web portal's reports, so both flag the same students.
+  double? get rate => total == 0 ? null : (present + late) / total * 100;
 
-  /// Share of counted days the student was in school, 0-100. Null with no data.
-  double? get rate => countedDays == 0 ? null : (present + late) / countedDays * 100;
-
-  /// Below the usual 80% exam-eligibility line, once there is enough data to judge.
-  bool get isAtRisk => countedDays >= 3 && (rate ?? 100) < 80;
+  /// Below the 80% attendance benchmark.
+  bool get isAtRisk => (rate ?? 100) < 80;
 }
 
 /// One subject mark from a term exam.
 class ExamResultRecord {
+  static const double passMark = 40;
+
   final String studentId;
   final String examId;
   final String examName;
+  final String examTerm;
+  final int? academicYear;
+  final String subjectId;
   final String subjectName;
+  final String subjectCategory;
   final double marks;
   final String grade;
 
@@ -83,16 +87,78 @@ class ExamResultRecord {
     required this.subjectName,
     required this.marks,
     required this.grade,
+    this.examTerm = '',
+    this.academicYear,
+    this.subjectId = '',
+    this.subjectCategory = '',
   });
+
+  bool get isFailing => grade.toUpperCase() == 'F' || marks < passMark;
+
+  String get marksLabel => marks.toStringAsFixed(marks % 1 == 0 ? 0 : 1);
+
+  /// Compulsory subjects count for everyone; an optional subject only counts
+  /// for a student who actually takes it.
+  bool appliesTo(StudentModel student) {
+    if (subjectCategory == 'compulsory') return true;
+    if (student.enrolledSubjectIds.isEmpty) return true;
+    return student.enrolledSubjectIds.contains(subjectId);
+  }
 
   factory ExamResultRecord.fromJson(Map<String, dynamic> json) {
     return ExamResultRecord(
       studentId: json['studentId'] ?? json['student_id'] ?? '',
       examId: json['examId'] ?? json['exam_id'] ?? '',
       examName: json['examName'] ?? json['examId'] ?? 'Examination',
+      examTerm: json['examTerm'] ?? '',
+      academicYear: int.tryParse('${json['academicYear'] ?? ''}'),
+      subjectId: json['subjectId'] ?? json['subject_id'] ?? '',
+      subjectCategory: json['subjectCategory'] ?? '',
       subjectName: json['subjectName'] ?? json['subjectId'] ?? 'Subject',
       marks: double.tryParse('${json['marksObtained'] ?? json['marks_obtained'] ?? 0}') ?? 0,
       grade: json['grade'] ?? '',
     );
   }
+}
+
+/// One student's place in a welfare scheme (meals, uniforms, scholarships...).
+class WelfareEnrolmentRecord {
+  final String id;
+  final String studentId;
+  final String studentName;
+  final String studentNo;
+  final String programId;
+  final String programName;
+  final String status; // enrolled | disbursed | cancelled
+  final String disbursedAt;
+  final String remarks;
+
+  WelfareEnrolmentRecord({
+    required this.id,
+    required this.studentId,
+    required this.programId,
+    required this.status,
+    this.studentName = '',
+    this.studentNo = '',
+    this.programName = '',
+    this.disbursedAt = '',
+    this.remarks = '',
+  });
+
+  factory WelfareEnrolmentRecord.fromJson(Map<String, dynamic> json) {
+    return WelfareEnrolmentRecord(
+      id: json['id'] ?? '',
+      studentId: json['studentId'] ?? '',
+      programId: json['programId'] ?? '',
+      status: (json['status'] ?? 'enrolled').toString().toLowerCase(),
+      studentName: (json['studentName'] ?? '').toString().trim(),
+      studentNo: json['studentNo'] ?? '',
+      programName: json['programName'] ?? '',
+      disbursedAt: json['disbursedAt'] ?? '',
+      remarks: json['remarks'] ?? '',
+    );
+  }
+
+  bool get isDisbursed => status == 'disbursed';
+  bool get isCancelled => status == 'cancelled';
 }

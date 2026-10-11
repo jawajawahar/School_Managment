@@ -14,7 +14,9 @@ import '../widgets/guardian_contact.dart';
 import '../widgets/server_settings_dialog.dart';
 import 'login_screen.dart';
 import 'my_class_screen.dart';
+import 'intervention_watchlist_screen.dart';
 import 'notifications_screen.dart';
+import 'welfare_log_screen.dart';
 
 class TeacherDashboardScreen extends StatefulWidget {
   final Function(int)? onNavigate;
@@ -147,6 +149,25 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                     ],
                   ),
                   const SizedBox(height: 20),
+
+                  if (hasClass) ...[
+                    const SectionTitle(title: 'Class Reports'),
+                    _buildReportTile(
+                      icon: Icons.crisis_alert_rounded,
+                      color: AppColors.absentRed,
+                      title: 'Intervention Watchlist',
+                      subtitle: 'Students below 80% attendance or failing a subject',
+                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const InterventionWatchlistScreen())),
+                    ),
+                    _buildReportTile(
+                      icon: Icons.volunteer_activism_outlined,
+                      color: const Color(0xFF0D9488),
+                      title: 'Welfare Log',
+                      subtitle: 'Scheme enrolments and disbursements for your class',
+                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WelfareLogScreen())),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
 
                   SectionTitle(
                     title: "Today's Periods",
@@ -530,6 +551,41 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   }
 
   // ------------------------------------------------------------- small parts
+
+  Widget _buildReportTile({
+    required IconData icon,
+    required Color color,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return AppCard(
+      margin: const EdgeInsets.only(bottom: 8),
+      onTap: onTap,
+      child: Row(
+        children: [
+          IconTile(icon: icon, color: color, size: 44),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(fontSize: 12, height: 1.3, color: AppColors.textSecondary),
+                ),
+              ],
+            ),
+          ),
+          const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
+        ],
+      ),
+    );
+  }
 
   void _openMyClass({bool atRiskOnly = false}) {
     Navigator.push(context, MaterialPageRoute(builder: (_) => MyClassScreen(startOnAtRisk: atRiskOnly)));
