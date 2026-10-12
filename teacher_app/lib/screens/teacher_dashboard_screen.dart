@@ -135,23 +135,63 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                 children: [
                   hasClass ? _buildAttendanceCard(attProvider) : _buildNoClassCard(),
                   if (hasClass) _buildAbsentFollowUp(attProvider.students.where((s) => s.attendanceStatus == 'absent').toList()),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
 
-                  const SectionTitle(title: 'Quick Actions'),
-                  Row(
-                    children: [
-                      _buildQuickAction('Attendance', Icons.fact_check_outlined, AppColors.presentGreen, _tabAttendance),
-                      hasClass
-                          ? _buildQuickAction('My Class', Icons.groups_outlined, AppColors.accent, null, onTap: _openMyClass)
-                          : _buildQuickAction('Timetable', Icons.calendar_month_outlined, AppColors.accent, _tabTimetable),
-                      _buildQuickAction('Leave', Icons.event_note_outlined, AppColors.lateOrange, _tabLeave),
-                      _buildQuickAction('Alert', Icons.campaign_outlined, AppColors.absentRed, _tabAlerts),
-                    ],
+                  // 2. My Leave
+                  SectionTitle(
+                    title: 'My Leave',
+                    actionLabel: 'Manage',
+                    onAction: () => widget.onNavigate?.call(_tabLeave),
                   ),
-                  const SizedBox(height: 20),
+                  AppCard(
+                    padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+                    onTap: () => widget.onNavigate?.call(_tabLeave),
+                    child: Row(
+                      children: [
+                        _buildLeaveFigure('${leaveProvider.pendingCount}', 'Pending', AppColors.lateOrange),
+                        _buildFigureDivider(),
+                        _buildLeaveFigure('${leaveProvider.approvedCount}', 'Approved', AppColors.presentGreen),
+                        _buildFigureDivider(),
+                        _buildLeaveFigure('${leaveProvider.rejectedCount}', 'Rejected', AppColors.absentRed),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
 
+                  // 3. My Class
                   if (hasClass) ...[
-                    const SectionTitle(title: 'Class Reports'),
+                    SectionTitle(
+                      title: 'My Class',
+                      actionLabel: 'View class',
+                      onAction: _openMyClass,
+                    ),
+                    AppCard(
+                      onTap: _openMyClass,
+                      child: Row(
+                        children: [
+                          const IconTile(icon: Icons.groups_outlined, color: AppColors.accent, size: 44),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  user!.assignedClassName,
+                                  style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '${attProvider.totalStudents} enrolled students • Tap to view roster',
+                                  style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
                     _buildReportTile(
                       icon: Icons.crisis_alert_rounded,
                       color: AppColors.absentRed,
@@ -166,9 +206,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       subtitle: 'Scheme enrolments and disbursements for your class',
                       onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WelfareLogScreen())),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 16),
                   ],
 
+                  // 4. Today's Periods
                   SectionTitle(
                     title: "Today's Periods",
                     actionLabel: 'Full timetable',
@@ -193,27 +234,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                     )
                   else
                     ..._todayPeriods.map(_buildPeriodRow),
-                  const SizedBox(height: 12),
-
-                  SectionTitle(
-                    title: 'My Leave',
-                    actionLabel: 'Manage',
-                    onAction: () => widget.onNavigate?.call(_tabLeave),
-                  ),
-                  AppCard(
-                    padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
-                    onTap: () => widget.onNavigate?.call(_tabLeave),
-                    child: Row(
-                      children: [
-                        _buildLeaveFigure('${leaveProvider.pendingCount}', 'Pending', AppColors.lateOrange),
-                        _buildFigureDivider(),
-                        _buildLeaveFigure('${leaveProvider.approvedCount}', 'Approved', AppColors.presentGreen),
-                        _buildFigureDivider(),
-                        _buildLeaveFigure('${leaveProvider.rejectedCount}', 'Rejected', AppColors.absentRed),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 16),
 
                   SectionTitle(
                     title: 'Announcements',
@@ -721,36 +742,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     );
   }
 
-  Widget _buildQuickAction(String label, IconData icon, Color color, int? tabIndex, {VoidCallback? onTap}) {
-    return Expanded(
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap ?? () => widget.onNavigate?.call(tabIndex ?? 0),
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 4),
-          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 4),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppColors.border),
-            boxShadow: AppColors.softShadow,
-          ),
-          child: Column(
-            children: [
-              IconTile(icon: icon, color: color),
-              const SizedBox(height: 8),
-              Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 
   Widget _buildPeriodRow(TimetableSlotModel slot) {
     return AppCard(
