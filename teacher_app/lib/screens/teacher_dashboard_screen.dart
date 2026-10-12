@@ -133,7 +133,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
                 children: [
-                  hasClass ? _buildAttendanceCard(attProvider, user!.assignedClassName) : _buildNoClassCard(),
+                  hasClass ? _buildAttendanceCard(attProvider) : _buildNoClassCard(),
                   if (hasClass) _buildAbsentFollowUp(attProvider.students.where((s) => s.attendanceStatus == 'absent').toList()),
                   const SizedBox(height: 20),
 
@@ -389,7 +389,9 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
 
   // --------------------------------------------------------- attendance card
 
-  Widget _buildAttendanceCard(AttendanceProvider att, String className) {
+  // --------------------------------------------------------- attendance card
+
+  Widget _buildAttendanceCard(AttendanceProvider att) {
     final total = att.totalStudents;
     final marked = att.presentCount + att.absentCount + att.lateCount + att.excusedCount;
     final unmarked = total - marked;
@@ -402,6 +404,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Header: TODAY'S ATTENDANCE + Enrolled student count (Grade removed per user request)
           Row(
             children: [
               Expanded(
@@ -410,14 +413,23 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   children: [
                     Text(
                       "TODAY'S ATTENDANCE",
-                      style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.8, color: AppColors.textMuted),
+                      style: GoogleFonts.inter(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.8,
+                        color: AppColors.textMuted,
+                      ),
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '$className  •  $total students',
+                      total > 0 ? '$total Students Enrolled' : 'Daily Roll Call',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                      style: GoogleFonts.outfit(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                      ),
                     ),
                   ],
                 ),
@@ -439,13 +451,20 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
+
+          // Rate Overview Row
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
                 marked > 0 ? '${rate.toStringAsFixed(0)}%' : '—',
-                style: GoogleFonts.outfit(fontSize: 36, height: 1, fontWeight: FontWeight.w800, color: AppColors.textPrimary),
+                style: GoogleFonts.outfit(
+                  fontSize: 34,
+                  height: 1,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textPrimary,
+                ),
               ),
               const SizedBox(width: 8),
               Padding(
@@ -455,35 +474,95 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary),
                 ),
               ),
+              const Spacer(),
+              if (marked > 0)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.accent.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.check_circle_outline_rounded, size: 13, color: AppColors.accent),
+                      const SizedBox(width: 4),
+                      Text(
+                        '$marked of $total recorded',
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.accent,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
             ],
           ),
-          const SizedBox(height: 12),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(6),
-            child: SizedBox(
-              height: 8,
-              child: total == 0
-                  ? Container(color: AppColors.border)
-                  : Row(
-                      children: [
-                        if (att.presentCount > 0) Expanded(flex: att.presentCount, child: Container(color: AppColors.presentGreen)),
-                        if (att.lateCount > 0) Expanded(flex: att.lateCount, child: Container(color: AppColors.lateOrange)),
-                        if (att.excusedCount > 0) Expanded(flex: att.excusedCount, child: Container(color: AppColors.excusedBlue)),
-                        if (att.absentCount > 0) Expanded(flex: att.absentCount, child: Container(color: AppColors.absentRed)),
-                        if (unmarked > 0) Expanded(flex: unmarked, child: Container(color: AppColors.border)),
-                      ],
-                    ),
+          const SizedBox(height: 14),
+
+          // Vertical Bar Graph Container
+          Container(
+            padding: const EdgeInsets.fromLTRB(8, 14, 8, 12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.border.withValues(alpha: 0.8), width: 1),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                _buildVerticalBar(
+                  label: 'Present',
+                  count: att.presentCount,
+                  total: total,
+                  color: AppColors.presentGreen,
+                  gradientColors: const [Color(0xFF34D399), Color(0xFF059669)],
+                ),
+                _buildVerticalBar(
+                  label: 'Late',
+                  count: att.lateCount,
+                  total: total,
+                  color: AppColors.lateOrange,
+                  gradientColors: const [Color(0xFFFBBF24), Color(0xFFD97706)],
+                ),
+                _buildVerticalBar(
+                  label: 'Excused',
+                  count: att.excusedCount,
+                  total: total,
+                  color: AppColors.excusedBlue,
+                  gradientColors: const [Color(0xFF38BDF8), Color(0xFF0284C7)],
+                ),
+                _buildVerticalBar(
+                  label: 'Absent',
+                  count: att.absentCount,
+                  total: total,
+                  color: AppColors.absentRed,
+                  gradientColors: const [Color(0xFFF87171), Color(0xFFDC2626)],
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              _buildLegend('Present', att.presentCount, AppColors.presentGreen),
-              _buildLegend('Late', att.lateCount, AppColors.lateOrange),
-              _buildLegend('Excused', att.excusedCount, AppColors.excusedBlue),
-              _buildLegend('Absent', att.absentCount, AppColors.absentRed),
-            ],
-          ),
+          if (unmarked > 0 && total > 0) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.lateOrange.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline_rounded, size: 14, color: AppColors.lateOrange),
+                  const SizedBox(width: 6),
+                  Text(
+                    '$unmarked student${unmarked > 1 ? 's' : ''} still pending attendance mark',
+                    style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.lateOrange),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 14),
           PrimaryButton(
             label: isComplete ? 'Review Register' : 'Mark Register',
@@ -495,23 +574,110 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     );
   }
 
-  Widget _buildLegend(String label, int count, Color color) {
+  Widget _buildVerticalBar({
+    required String label,
+    required int count,
+    required int total,
+    required Color color,
+    required List<Color> gradientColors,
+  }) {
+    final double pct = total > 0 ? (count / total) * 100 : 0.0;
+    const double maxTrackHeight = 84.0;
+
+    // Proportional height with minimum visible pill if count > 0
+    double barHeight = 4.0;
+    if (total > 0 && count > 0) {
+      barHeight = (count / total) * maxTrackHeight;
+      if (barHeight < 12.0) barHeight = 12.0;
+    }
+
     return Expanded(
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Text('$count', style: GoogleFonts.outfit(fontSize: 17, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
-          const SizedBox(height: 2),
+          // Numeric Value
+          Text(
+            '$count',
+            style: GoogleFonts.outfit(
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              color: count > 0 ? AppColors.textPrimary : AppColors.textMuted,
+            ),
+          ),
+          // Percentage
+          Text(
+            '${pct.toStringAsFixed(0)}%',
+            style: GoogleFonts.inter(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: count > 0 ? color : AppColors.textMuted,
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // Vertical Capsule Bar Track
+          Container(
+            height: maxTrackHeight,
+            width: 22,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(11),
+            ),
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 500),
+                curve: Curves.easeOutCubic,
+                height: barHeight,
+                width: 22,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: count > 0
+                        ? gradientColors
+                        : [color.withValues(alpha: 0.3), color.withValues(alpha: 0.2)],
+                  ),
+                  borderRadius: BorderRadius.circular(11),
+                  boxShadow: count > 0
+                      ? [
+                          BoxShadow(
+                            color: color.withValues(alpha: 0.3),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ]
+                      : null,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // Legend Label with Indicator Dot
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Container(width: 6, height: 6, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+              Container(
+                width: 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  color: color,
+                  shape: BoxShape.circle,
+                ),
+              ),
               const SizedBox(width: 4),
               Flexible(
                 child: Text(
                   label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w500, color: AppColors.textSecondary),
+                  style: GoogleFonts.inter(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
                 ),
               ),
             ],

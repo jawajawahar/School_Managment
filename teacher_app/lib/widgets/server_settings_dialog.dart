@@ -138,15 +138,21 @@ class _ServerSettingsDialogState extends State<ServerSettingsDialog> {
               runSpacing: 6,
               children: [
                 ActionChip(
-                  avatar: const Icon(Icons.wifi_rounded, size: 14, color: AppColors.primary),
-                  label: Text('Hotspot (172.20.10.3)', style: GoogleFonts.inter(fontSize: 11)),
-                  onPressed: () => _applyPreset('http://172.20.10.3:5000/api'),
-                  backgroundColor: AppColors.primary.withValues(alpha: 0.08),
+                  avatar: const Icon(Icons.cloud_done_rounded, size: 14, color: AppColors.primary),
+                  label: Text('Live Cloud (Render)', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600)),
+                  onPressed: () => _applyPreset(ApiConstants.liveCloudUrl),
+                  backgroundColor: AppColors.primary.withValues(alpha: 0.12),
                 ),
                 ActionChip(
-                  avatar: const Icon(Icons.computer_rounded, size: 14, color: AppColors.textSecondary),
-                  label: Text('Localhost', style: GoogleFonts.inter(fontSize: 11)),
-                  onPressed: () => _applyPreset('http://localhost:5000/api'),
+                  avatar: const Icon(Icons.phone_android_rounded, size: 14, color: AppColors.accent),
+                  label: Text('Emulator (10.0.2.2)', style: GoogleFonts.inter(fontSize: 11)),
+                  onPressed: () => _applyPreset('http://10.0.2.2:5000/api'),
+                  backgroundColor: AppColors.accent.withValues(alpha: 0.08),
+                ),
+                ActionChip(
+                  avatar: const Icon(Icons.wifi_rounded, size: 14, color: AppColors.textSecondary),
+                  label: Text('PC Hotspot (172.20.10.3)', style: GoogleFonts.inter(fontSize: 11)),
+                  onPressed: () => _applyPreset('http://172.20.10.3:5000/api'),
                   backgroundColor: Colors.grey.shade100,
                 ),
               ],
@@ -189,6 +195,13 @@ class _ServerSettingsDialogState extends State<ServerSettingsDialog> {
         ),
       ),
       actions: [
+        TextButton(
+          onPressed: () {
+            _ipController.text = ApiConstants.liveCloudUrl;
+            _saveAndTest();
+          },
+          child: Text('Reset to Cloud', style: GoogleFonts.inter(color: AppColors.primary, fontWeight: FontWeight.w600)),
+        ),
         TextButton(
           onPressed: () => Navigator.pop(context),
           child: Text('Close', style: GoogleFonts.inter(color: AppColors.textSecondary)),

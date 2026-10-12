@@ -1,20 +1,38 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiConstants {
+  static const String liveCloudUrl = 'https://school-managment-jk78.onrender.com/api';
   static String? _customHost;
 
   static Future<void> loadCustomHost() async {
     final prefs = await SharedPreferences.getInstance();
-    _customHost = prefs.getString('custom_server_ip');
+    final saved = prefs.getString('custom_server_ip');
+    // If the saved host was the temporary hotspot IP, clear it so it defaults to live Render backend
+    if (saved != null && (saved.contains('172.20.10.3') || saved.contains('localhost:5000'))) {
+      await prefs.remove('custom_server_ip');
+      _customHost = null;
+    } else {
+      _customHost = saved;
+    }
+  }
+
+  static Future<void> resetToCloud() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('custom_server_ip');
+    _customHost = null;
   }
 
   static Future<void> setCustomHost(String ipOrUrl) async {
     final prefs = await SharedPreferences.getInstance();
     var clean = ipOrUrl.trim();
-    if (clean.isNotEmpty && !clean.startsWith('http://') && !clean.startsWith('https://')) {
+    if (clean.isEmpty || clean == liveCloudUrl) {
+      await resetToCloud();
+      return;
+    }
+    if (!clean.startsWith('http://') && !clean.startsWith('https://')) {
       clean = 'http://$clean';
     }
-    if (clean.isNotEmpty && !clean.endsWith('/api')) {
+    if (!clean.endsWith('/api')) {
       clean = '$clean/api';
     }
     _customHost = clean;
@@ -25,7 +43,7 @@ class ApiConstants {
     if (_customHost != null && _customHost!.isNotEmpty) {
       return _customHost!;
     }
-    return 'https://school-managment-jk78.onrender.com/api';
+    return liveCloudUrl;
   }
 
   // Auth

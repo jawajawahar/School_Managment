@@ -5,6 +5,9 @@ on:
   push:
     branches: [ main, master ]
 
+permissions:
+  contents: write
+
 jobs:
   build-ios:
     runs-on: macos-latest
@@ -41,3 +44,15 @@ jobs:
         with:
           name: GSMS_Teacher_App_IPA
           path: teacher_app/build/ios/ipa/GSMS_Teacher_App.ipa
+
+      - name: Publish or Update GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main'
+        with:
+          tag_name: latest
+          name: "GSMS Teacher Companion (Latest IPA)"
+          body: "Updated iOS build with modern vertical attendance bar graph UI."
+          files: teacher_app/build/ios/ipa/GSMS_Teacher_App.ipa
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
