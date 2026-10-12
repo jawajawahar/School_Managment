@@ -396,7 +396,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     final marked = att.presentCount + att.absentCount + att.lateCount + att.excusedCount;
     final unmarked = total - marked;
     final isComplete = total > 0 && unmarked == 0;
-    final rate = marked > 0 ? ((att.presentCount + att.lateCount) / marked) * 100 : 0.0;
 
     return AppCard(
       margin: EdgeInsets.zero,
@@ -404,106 +403,9 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header: TODAY'S ATTENDANCE + Enrolled student count (Grade removed per user request)
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      "TODAY'S ATTENDANCE",
-                      style: GoogleFonts.inter(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.8,
-                        color: AppColors.textMuted,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      total > 0 ? '$total Students Enrolled' : 'Daily Roll Call',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.outfit(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: (isComplete ? AppColors.presentGreen : AppColors.lateOrange).withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  total == 0 ? 'No students' : (isComplete ? 'Completed' : '$unmarked to mark'),
-                  style: GoogleFonts.inter(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: isComplete ? AppColors.presentGreen : AppColors.lateOrange,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-
-          // Rate Overview Row
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                marked > 0 ? '${rate.toStringAsFixed(0)}%' : '—',
-                style: GoogleFonts.outfit(
-                  fontSize: 34,
-                  height: 1,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Text(
-                  marked > 0 ? 'in class today' : 'register not marked yet',
-                  style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary),
-                ),
-              ),
-              const Spacer(),
-              if (marked > 0)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: AppColors.accent.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.check_circle_outline_rounded, size: 13, color: AppColors.accent),
-                      const SizedBox(width: 4),
-                      Text(
-                        '$marked of $total recorded',
-                        style: GoogleFonts.inter(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.accent,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 14),
-
-          // Vertical Bar Graph Container
+          // Pure Vertical Bar Graph
           Container(
-            padding: const EdgeInsets.fromLTRB(8, 14, 8, 12),
+            padding: const EdgeInsets.fromLTRB(8, 16, 8, 14),
             decoration: BoxDecoration(
               color: const Color(0xFFF8FAFC),
               borderRadius: BorderRadius.circular(16),
@@ -543,26 +445,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
               ],
             ),
           ),
-          if (unmarked > 0 && total > 0) ...[
-            const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: AppColors.lateOrange.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.info_outline_rounded, size: 14, color: AppColors.lateOrange),
-                  const SizedBox(width: 6),
-                  Text(
-                    '$unmarked student${unmarked > 1 ? 's' : ''} still pending attendance mark',
-                    style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.lateOrange),
-                  ),
-                ],
-              ),
-            ),
-          ],
           const SizedBox(height: 14),
           PrimaryButton(
             label: isComplete ? 'Review Register' : 'Mark Register',
@@ -582,7 +464,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     required List<Color> gradientColors,
   }) {
     final double pct = total > 0 ? (count / total) * 100 : 0.0;
-    const double maxTrackHeight = 84.0;
+    const double maxTrackHeight = 92.0;
 
     // Proportional height with minimum visible pill if count > 0
     double barHeight = 4.0;
@@ -599,7 +481,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           Text(
             '$count',
             style: GoogleFonts.outfit(
-              fontSize: 15,
+              fontSize: 16,
               fontWeight: FontWeight.w800,
               color: count > 0 ? AppColors.textPrimary : AppColors.textMuted,
             ),
@@ -618,10 +500,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           // Vertical Capsule Bar Track
           Container(
             height: maxTrackHeight,
-            width: 22,
+            width: 24,
             decoration: BoxDecoration(
               color: color.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(11),
+              borderRadius: BorderRadius.circular(12),
             ),
             child: Align(
               alignment: Alignment.bottomCenter,
@@ -629,7 +511,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                 duration: const Duration(milliseconds: 500),
                 curve: Curves.easeOutCubic,
                 height: barHeight,
-                width: 22,
+                width: 24,
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
@@ -638,7 +520,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                         ? gradientColors
                         : [color.withValues(alpha: 0.3), color.withValues(alpha: 0.2)],
                   ),
-                  borderRadius: BorderRadius.circular(11),
+                  borderRadius: BorderRadius.circular(12),
                   boxShadow: count > 0
                       ? [
                           BoxShadow(
