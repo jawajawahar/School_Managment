@@ -6,6 +6,7 @@ import '../constants/app_colors.dart';
 class AppHeader extends StatelessWidget {
   final String title;
   final String? subtitle;
+  final Widget? leading;
   final List<Widget> actions;
 
   /// Optional content under the title row (tabs, stat chips, progress).
@@ -15,6 +16,7 @@ class AppHeader extends StatelessWidget {
     super.key,
     required this.title,
     this.subtitle,
+    this.leading,
     this.actions = const [],
     this.bottom,
   });
@@ -27,12 +29,16 @@ class AppHeader extends StatelessWidget {
       child: SafeArea(
         bottom: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 14, 8, 16),
+          padding: EdgeInsets.fromLTRB(leading != null ? 8 : 20, 14, 8, 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
+                  if (leading != null) ...[
+                    leading!,
+                    const SizedBox(width: 4),
+                  ],
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,

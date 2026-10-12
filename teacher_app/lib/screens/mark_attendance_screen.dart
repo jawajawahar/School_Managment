@@ -8,7 +8,9 @@ import '../providers/attendance_provider.dart';
 import '../widgets/app_ui.dart';
 
 class MarkAttendanceScreen extends StatelessWidget {
-  const MarkAttendanceScreen({super.key});
+  final VoidCallback? onBack;
+
+  const MarkAttendanceScreen({super.key, this.onBack});
 
   static const List<_StatusOption> _statusOptions = [
     _StatusOption('present', 'P', 'Present', AppColors.presentGreen),
@@ -57,22 +59,36 @@ class MarkAttendanceScreen extends StatelessWidget {
     final hasClass = attProvider.selectedClassId != null;
     final userClasses = attProvider.getClassesForUser(user);
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: Column(
-        children: [
-          AppHeader(
-            title: 'Attendance',
-            subtitle: hasClass ? '${attProvider.selectedClassName}  •  $total students' : 'Daily class register',
-            actions: [
-              HeaderIconButton(
-                icon: Icons.refresh_rounded,
-                tooltip: 'Refresh Roster',
-                onPressed: () => _refresh(context),
-              ),
-            ],
-            bottom: hasClass
-                ? Row(
+    return PopScope(
+      canPop: onBack == null,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && onBack != null) {
+          onBack!();
+        }
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        body: Column(
+          children: [
+            AppHeader(
+              title: 'Attendance',
+              subtitle: hasClass ? '${attProvider.selectedClassName}  •  $total students' : 'Daily class register',
+              leading: onBack != null
+                  ? IconButton(
+                      icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+                      tooltip: 'Back to Home',
+                      onPressed: onBack,
+                    )
+                  : null,
+              actions: [
+                HeaderIconButton(
+                  icon: Icons.refresh_rounded,
+                  tooltip: 'Refresh Roster',
+                  onPressed: () => _refresh(context),
+                ),
+              ],
+              bottom: hasClass
+                  ? Row(
                     children: [
                       HeaderStat(value: '${attProvider.presentCount}', label: 'Present', dotColor: AppColors.presentGreen),
                       HeaderStat(value: '${attProvider.absentCount}', label: 'Absent', dotColor: AppColors.absentRed),
@@ -116,8 +132,9 @@ class MarkAttendanceScreen extends StatelessWidget {
           if (hasClass && total > 0) _buildFooter(context, attProvider, user?.fullName ?? 'Teacher', marked, total, isAllMarked),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   // --------------------------------------------------------------- toolbar
 
@@ -309,45 +326,61 @@ class MarkAttendanceScreen extends StatelessWidget {
   }
 
   // ---------------------------------------------------------------- footer
-
+ 
   Widget _buildFooter(BuildContext context, AttendanceProvider attProvider, String teacherName, int marked, int total, bool isAllMarked) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(top: BorderSide(color: AppColors.border)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: total == 0 ? 0 : marked / total,
-                    minHeight: 6,
-                    backgroundColor: AppColors.border,
-                    valueColor: AlwaysStoppedAnimation(isAllMarked ? AppColors.presentGreen : AppColors.accent),
-                  ),
+    return SafeArea(
+      top: false,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border: const Border(top: BorderSide(color: AppColors.border)),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.primaryDark.withValues(alpha: 0.05),
+              blurRadius: 10,
+              offset: const Offset(0, -2),
+            ),
+          ],
+        ),
+        child: isAllMarked
+            ? PrimaryButton(
+                label: 'Save Attendance Register',
+                icon: Icons.cloud_upload_outlined,
+                isBusy: attProvider.isSubmitting,
+                onPressed: () => _save(context, attProvider, teacherName),
+              )
+            : Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+                decoration: BoxDecoration(
+                  color: AppColors.background,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.pending_actions_rounded,
+                      size: 20,
+                      color: marked > 0 ? AppColors.accent : AppColors.textMuted,
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        'Mark all students to save register ($marked of $total marked)',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.inter(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(width: 10),
-              Text(
-                '$marked / $total marked',
-                style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textSecondary),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          PrimaryButton(
-            label: isAllMarked ? 'Save Attendance Register' : 'Mark all students to save',
-            icon: isAllMarked ? Icons.cloud_upload_outlined : Icons.pending_actions_outlined,
-            isBusy: attProvider.isSubmitting,
-            onPressed: isAllMarked ? () => _save(context, attProvider, teacherName) : null,
-          ),
-        ],
       ),
     );
   }
